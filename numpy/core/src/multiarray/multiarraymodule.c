@@ -1153,8 +1153,8 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
 
     NPY_BEGIN_THREADS_DEF;
 
-    n1 = PyArray_DIMS(ap1)[0];
-    n2 = PyArray_DIMS(ap2)[0];
+    n1 = PyArray_DIMS(ap1)[0];      /* size of x */
+    n2 = PyArray_DIMS(ap2)[0];      /* size of y */
     if (n1 < n2) {
         ret = ap1;
         ap1 = ap2;
@@ -1174,15 +1174,18 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     case 0:
         length = length - n + 1;
         n_left = n_right = 0;
+        /* mode = 'valid' */
         break;
     case 1:
         n_left = (npy_intp)(n/2);
         n_right = n - n_left - 1;
+        /* mode = 'same' */
         break;
     case 2:
         n_right = n - 1;
         n_left = n - 1;
         length = length + n - 1;
+        /* mode = 'full' */
         break;
     default:
         PyErr_SetString(PyExc_ValueError, "mode must be 0, 1, or 2");
@@ -1192,6 +1195,7 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     /*
      * Need to choose an output array that can hold a sum
      * -- use priority to determine which subtype.
+     * ret is the array that will be returned as the answer
      */
     ret = new_array_for_sum(ap1, ap2, NULL, 1, &length, typenum);
     if (ret == NULL) {
@@ -1205,18 +1209,18 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     }
 
     NPY_BEGIN_THREADS_DESCR(PyArray_DESCR(ret));
-    is1 = PyArray_STRIDES(ap1)[0];
-    is2 = PyArray_STRIDES(ap2)[0];
-    op = PyArray_DATA(ret);
-    os = PyArray_DESCR(ret)->elsize;
-    ip1 = PyArray_DATA(ap1);
-    ip2 = PyArray_BYTES(ap2) + n_left*is2;
     n = n - n_left;
     for (i = 0; i < n_left; i++) {
         dot(ip1, is1, ip2, is2, op, n, ret);
         n++;
         ip2 -= is2;
         op += os;
+    ip1 = PyArray_DATA(ap1);            /* x[0]             */
+    is1 = PyArray_STRIDES(ap1)[0];      /* x strides        */
+    ip2 = PyArray_DATA(ap2);            /* y[0]             */
+    is2 = PyArray_STRIDES(ap2)[0];      /* y strides        */
+    op = PyArray_DATA(ret);             /* answer data      */
+    os = PyArray_DESCR(ret)->elsize;    /* answer strides   */
     }
     if (small_correlate(ip1, is1, n1 - n2 + 1, PyArray_TYPE(ap1),
                         ip2, is2, n, PyArray_TYPE(ap2),
