@@ -139,6 +139,7 @@ class format_parser:
     dtype([('f0', '<f8'), ('f1', '<i4'), ('f2', '|S5')])
 
     """
+
     def __init__(self, formats, names, titles, aligned=False, byteorder=None):
         self._parseFormats(formats, aligned)
         self._setfieldnames(names, titles)
@@ -434,7 +435,7 @@ class recarray(ndarray):
         # accessed by attribute).
         try:
             return object.__getattribute__(self, attr)
-        except AttributeError: # attr must be a fieldname
+        except AttributeError:  # attr must be a fieldname
             pass
 
         # look for a field with this name
@@ -447,12 +448,14 @@ class recarray(ndarray):
 
         # At this point obj will always be a recarray, since (see
         # PyArray_GetField) the type of obj is inherited. Next, if obj.dtype is
-        # non-structured, convert it to an ndarray. If obj is structured leave
-        # it as a recarray, but make sure to convert to the same dtype.type (eg
-        # to preserve numpy.record type if present), since nested structured
-        # fields do not inherit type.
+        # non-structured, convert it to an ndarray. Then if obj is structured
+        # with void type convert it to the same dtype.type (eg to preserve
+        # numpy.record type if present), since nested structured fields do not
+        # inherit type. Don't do this for non-void structures though.
         if obj.dtype.fields:
-            return obj.view(dtype=(self.dtype.type, obj.dtype.fields))
+            if issubclass(obj.dtype.type, nt.void):
+                return obj.view(dtype=(self.dtype.type, obj.dtype))
+            return obj
         else:
             return obj.view(ndarray)
 
@@ -462,8 +465,9 @@ class recarray(ndarray):
     # Thus, you can't create attributes on-the-fly that are field names.
     def __setattr__(self, attr, val):
 
-        # Automatically convert (void) dtypes to records.
-        if attr == 'dtype' and issubclass(val.type, nt.void):
+        # Automatically convert (void) structured types to records
+        # (but not non-void structures, subarrays, or non-structured voids)
+        if attr == 'dtype' and issubclass(val.type, nt.void) and val.fields:
             val = sb.dtype((record, val))
 
         newattr = attr not in self.__dict__
@@ -478,9 +482,10 @@ class recarray(ndarray):
             fielddict = ndarray.__getattribute__(self, 'dtype').fields or {}
             if attr not in fielddict:
                 return ret
-            if newattr:         # We just added this one
-                try:            #  or this setattr worked on an internal
-                                #  attribute.
+            if newattr:
+                # We just added this one or this setattr worked on an
+                # internal attribute.
+                try:
                     object.__delattr__(self, attr)
                 except:
                     return ret
@@ -497,7 +502,9 @@ class recarray(ndarray):
         # we might also be returning a single element
         if isinstance(obj, ndarray):
             if obj.dtype.fields:
-                return obj.view(dtype=(self.dtype.type, obj.dtype.fields))
+                if issubclass(obj.dtype.type, nt.void):
+                    return obj.view(dtype=(self.dtype.type, obj.dtype))
+                return obj
             else:
                 return obj.view(type=ndarray)
         else:
@@ -506,22 +513,25 @@ class recarray(ndarray):
 
     def __repr__(self):
         # get data/shape string. logic taken from numeric.array_repr
-        if self.size > 0 or self.shape==(0,):
+        if self.size > 0 or self.shape == (0,):
             lst = sb.array2string(self, separator=', ')
         else:
             # show zero-length shape unless it is (0,)
             lst = "[], shape=%s" % (repr(self.shape),)
 
         if (self.dtype.type is record
-                or (not issubclass(self.dtype.type, nt.void)) ):
+                or (not issubclass(self.dtype.type, nt.void))):
             # If this is a full record array (has numpy.record dtype),
             # or if it has a scalar (non-void) dtype with no records,
             # represent it using the rec.array function. Since rec.array
-            # converts dtype to a numpy.record for us, use only dtype.descr,
-            # not repr(dtype).
+            # converts dtype to a numpy.record for us, convert back
+            # to non-record before printing
+            plain_dtype = self.dtype
+            if plain_dtype.type is record:
+                plain_dtype = sb.dtype((nt.void, plain_dtype))
             lf = '\n'+' '*len("rec.array(")
             return ('rec.array(%s, %sdtype=%s)' %
-                          (lst, lf, repr(self.dtype.descr)))
+                          (lst, lf, plain_dtype))
         else:
             # otherwise represent it using np.array plus a view
             # This should only happen if the user is playing
@@ -683,7 +693,6 @@ def fromstring(datastring, dtype=None, shape=None, offset=0, formats=None,
     """ create a (read-only) record array from binary data contained in
     a string"""
 
-
     if dtype is None and formats is None:
         raise ValueError("Must have dtype= or formats=")
 
@@ -756,7 +765,7 @@ def fromfile(fd, dtype=None, shape=None, offset=0, formats=None,
     shapesize = shapeprod * itemsize
     if shapesize < 0:
         shape = list(shape)
-        shape[ shape.index(-1) ] = size / -shapesize
+        shape[shape.index(-1)] = size / -shapesize
         shape = tuple(shape)
         shapeprod = sb.array(shape).prod()
 
@@ -781,10 +790,9 @@ def array(obj, dtype=None, shape=None, offset=0, strides=None, formats=None,
     """Construct a record array from a wide-variety of objects.
     """
 
-    if (isinstance(obj, (type(None), str)) or isfileobj(obj)) \
-           and (formats is None) \
-           and (dtype is None):
-        raise ValueError("Must define formats (or dtype) if object is "\
+    if ((isinstance(obj, (type(None), str)) or isfileobj(obj)) and
+           (formats is None) and (dtype is None)):
+        raise ValueError("Must define formats (or dtype) if object is "
                          "None, string, or an open file")
 
     kwds = {}
@@ -795,10 +803,10 @@ def array(obj, dtype=None, shape=None, offset=0, strides=None, formats=None,
                               aligned, byteorder)._descr
     else:
         kwds = {'formats': formats,
-                'names' : names,
-                'titles' : titles,
-                'aligned' : aligned,
-                'byteorder' : byteorder
+                'names': names,
+                'titles': titles,
+                'aligned': aligned,
+                'byteorder': byteorder
                 }
 
     if obj is None:

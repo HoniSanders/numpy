@@ -1,13 +1,13 @@
 NumPy 1.10.0 Release Notes
 **************************
 
-This release supports Python 2.6 - 2.7 and 3.2 - 3.4.
+This release supports Python 2.6 - 2.7 and 3.2 - 3.5.
 
 
 Highlights
 ==========
-* numpy.distutils now supports parallel compilation via the --jobs/-j argument
-  passed to setup.py build
+* numpy.distutils now supports parallel compilation via the --parallel/-j
+  argument passed to setup.py build
 * numpy.distutils now supports additional customization via site.cfg to
   control compilation parameters, i.e. runtime libraries, extra
   linking/compilation flags.
@@ -50,10 +50,20 @@ See below for more details on these changes.
 Compatibility notes
 ===================
 
+Default casting rule change
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Default casting for inplace operations has changed to ``'same_kind'``. For
+instance, if n is an array of integers, and f is an array of floats, then
+``n += f`` will result in a ``TypeError``, whereas in previous Numpy
+versions the floats would be silently cast to ints. In the unlikely case
+that the example code is not an actual bug, it can be updated in a backward
+compatible way by rewriting it as ``np.add(n, f, out=n, casting='unsafe')``.
+The old ``'unsafe'`` default has been deprecated since Numpy 1.7.
+
 numpy version string
 ~~~~~~~~~~~~~~~~~~~~
 The numpy version string for development builds has been changed from
-``x.y.z.dev-githash`` to ``x.y.z.dev+githash`` (note the +) in order to comply
+``x.y.z.dev-githash`` to ``x.y.z.dev0+githash`` (note the +) in order to comply
 with PEP 440.
 
 relaxed stride checking
@@ -81,10 +91,21 @@ Previously, a view was returned except when no change was made in the order
 of the axes, in which case the input array was returned.  A view is now
 returned in all cases.
 
+*nonzero* now returns base ndarrays
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Previously, an inconsistency existed between 1-D inputs (returning a
+base ndarray) and higher dimensional ones (which preserved subclasses).
+Behavior has been unified, and the return will now be a base ndarray.
+Subclasses can still override this behavior by providing their own
+*nonzero* method.
+
 C API
 ~~~~~
 The changes to *swapaxes* also apply to the *PyArray_SwapAxes* C function,
 which now returns a view in all cases.
+
+The changes to *nonzero* also apply to the *PyArray_Nonzero* C function,
+which now returns a base ndarray in all cases.
 
 The dtype structure (PyArray_Descr) has a new member at the end to cache
 its hash value.  This shouldn't affect any well-written applications.
@@ -130,10 +151,19 @@ corrupted masked array, but a fully masked version of the item.
 
 Median warns and returns nan when invalid values are encountered
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Similar to mean, median and percentile now emits a Runtime warning and 
+Similar to mean, median and percentile now emits a Runtime warning and
 returns `NaN` in slices where a `NaN` is present.
-To compute the median or percentile while ignoring invalid values use the 
+To compute the median or percentile while ignoring invalid values use the
 new `nanmedian` or `nanpercentile` functions.
+
+Functions available from numpy.ma.testutils have changed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+All functions from numpy.testing were once available from
+numpy.ma.testutils but not all of them were redefined to work with masked
+arrays. Most of those functions have now been removed from
+numpy.ma.testutils with a small subset retained in order to preserve
+backward compatibility. In the long run this should help avoid mistaken use
+of the wrong functions, but it may cause import problems for some.
 
 
 New Features
@@ -161,7 +191,7 @@ and a bit faster.
 
 numpy.distutils now allows parallel compilation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-By passing *--jobs=n* or *-j n* to *setup.py build* the compilation of
+By passing *--parallel=n* or *-j n* to *setup.py build* the compilation of
 extensions is now performed in *n* parallel processes.
 The parallelization is limited to files within one extension so projects using
 Cython will not profit because it builds extensions from single files.
@@ -280,7 +310,7 @@ what was provided by *np.allclose*.
 
 *np.allclose* uses *np.isclose* internally.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*np.allcose* now uses *np.isclose* internally and inherits the ability to
+*np.allclose* now uses *np.isclose* internally and inherits the ability to
 compare NaNs as equal by setting ``equal_nan=True``. Subclasses, such as
 *np.ma.MaskedArray*, are also preserved now.
 
@@ -327,6 +357,12 @@ views returned from *np.einsum* are writeable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Views returned by *np.einsum* will now be writeable whenever the input
 array is writeable.
+
+*np.argmin* skips NaT values
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*np.argmin* now skips NaT values in datetime64 and timedelta64 arrays,
+making it consistent with *np.min*, *np.argmax* and *np.max*.
 
 
 Deprecations

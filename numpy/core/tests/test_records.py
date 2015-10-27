@@ -1,14 +1,16 @@
 from __future__ import division, absolute_import, print_function
 
 import sys
-from os import path
-import numpy as np
-from numpy.testing import *
-from numpy.compat import asbytes, asunicode
-
-import warnings
 import collections
 import pickle
+from os import path
+
+import numpy as np
+from numpy.compat import asbytes
+from numpy.testing import (
+    TestCase, run_module_suite, assert_, assert_equal, assert_array_equal,
+    assert_array_almost_equal, assert_raises
+    )
 
 
 class TestFromrecords(TestCase):
@@ -53,10 +55,11 @@ class TestFromrecords(TestCase):
         filename = path.join(data_dir, 'recarray_from_file.fits')
         fd = open(filename, 'rb')
         fd.seek(2880 * 2)
-        r = np.rec.fromfile(fd, formats='f8,i4,a5', shape=3, byteorder='big')
+        r1 = np.rec.fromfile(fd, formats='f8,i4,a5', shape=3, byteorder='big')
         fd.seek(2880 * 2)
-        r = np.rec.array(fd, formats='f8,i4,a5', shape=3, byteorder='big')
+        r2 = np.rec.array(fd, formats='f8,i4,a5', shape=3, byteorder='big')
         fd.close()
+        assert_equal(r1, r2)
 
     def test_recarray_from_obj(self):
         count = 10
@@ -118,6 +121,23 @@ class TestFromrecords(TestCase):
         assert_equal(type(rv), np.recarray)
         assert_equal(rv.dtype.type, np.record)
 
+        # check that accessing nested structures keep record type, but
+        # not for subarrays, non-void structures, non-structured voids
+        test_dtype = [('a', 'f4,f4'), ('b', 'V8'), ('c', ('f4',2)),
+                      ('d', ('i8', 'i4,i4'))]
+        r = np.rec.array([((1,1), b'11111111', [1,1], 1),
+                          ((1,1), b'11111111', [1,1], 1)], dtype=test_dtype)
+        assert_equal(r.a.dtype.type, np.record)
+        assert_equal(r.b.dtype.type, np.void)
+        assert_equal(r.c.dtype.type, np.float32)
+        assert_equal(r.d.dtype.type, np.int64)
+        # check the same, but for views
+        r = np.rec.array(np.ones(4, dtype='i4,i4'))
+        assert_equal(r.view('f4,f4').dtype.type, np.record)
+        assert_equal(r.view(('i4',2)).dtype.type, np.int32)
+        assert_equal(r.view('V8').dtype.type, np.void)
+        assert_equal(r.view(('i8', 'i4,i4')).dtype.type, np.int64)
+
         #check that we can undo the view
         arrs = [np.ones(4, dtype='f4,i4'), np.ones(4, dtype='f8')]
         for arr in arrs:
@@ -131,6 +151,12 @@ class TestFromrecords(TestCase):
         # make sure non-structured dtypes also show up as rec.array
         a = np.array(np.ones(4, dtype='f8'))
         assert_(repr(np.rec.array(a)).startswith('rec.array'))
+
+        # check that the 'np.record' part of the dtype isn't shown
+        a = np.rec.array(np.ones(3, dtype='i4,i4'))
+        assert_equal(repr(a).find('numpy.record'), -1)
+        a = np.rec.array(np.ones(3, dtype='i4'))
+        assert_(repr(a).find('dtype=int32') != -1)
 
     def test_recarray_from_names(self):
         ra = np.rec.array([
@@ -235,8 +261,10 @@ class TestRecord(TestCase):
 
     def test_invalid_assignment(self):
         a = self.data
+
         def assign_invalid_column(x):
             x[0].col5 = 1
+
         self.assertRaises(AttributeError, assign_invalid_column, a)
 
     def test_out_of_order_fields(self):
@@ -260,11 +288,11 @@ class TestRecord(TestCase):
         # https://github.com/numpy/numpy/issues/2599
         dt = np.dtype([('foo', 'i8'), ('bar', 'O')])
         r = np.zeros((1,3), dtype=dt).view(np.recarray)
-        r.foo = np.array([1, 2, 3]) # TypeError?
+        r.foo = np.array([1, 2, 3])  # TypeError?
 
         # https://github.com/numpy/numpy/issues/3256
         ra = np.recarray((2,), dtype=[('x', object), ('y', float), ('z', int)])
-        ra[['x','y']] #TypeError?
+        ra[['x','y']]  # TypeError?
 
     def test_record_scalar_setitem(self):
         # https://github.com/numpy/numpy/issues/3561

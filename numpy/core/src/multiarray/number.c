@@ -405,6 +405,15 @@ array_matrix_multiply(PyArrayObject *m1, PyObject *m2)
                                0, nb_matrix_multiply);
     return PyArray_GenericBinaryFunction(m1, m2, matmul);
 }
+
+static PyObject *
+array_inplace_matrix_multiply(PyArrayObject *m1, PyObject *m2)
+{
+    PyErr_SetString(PyExc_TypeError,
+                    "In-place matrix multiplication is not (yet) supported. "
+                    "Use 'a = a @ b' instead of 'a @= b'.");
+    return NULL;
+}
 #endif
 
 /* Determine if object is a scalar and if so, convert the object
@@ -1016,17 +1025,10 @@ _array_copy_nice(PyArrayObject *self)
 static PyObject *
 array_index(PyArrayObject *v)
 {
-    if (!PyArray_ISINTEGER(v) || PyArray_SIZE(v) != 1) {
-        PyErr_SetString(PyExc_TypeError, "only integer arrays with "     \
-                        "one element can be converted to an index");
+    if (!PyArray_ISINTEGER(v) || PyArray_NDIM(v) != 0) {
+        PyErr_SetString(PyExc_TypeError,
+            "only integer scalar arrays can be converted to a scalar index");
         return NULL;
-    }
-    if (PyArray_NDIM(v) != 0) {
-        /* 2013-04-20, 1.8 */
-        if (DEPRECATE("converting an array with ndim > 0 to an index"
-                      " will result in an error in the future") < 0) {
-            return NULL;
-        }
     }
     return PyArray_DESCR(v)->f->getitem(PyArray_DATA(v), v);
 }
@@ -1092,6 +1094,6 @@ NPY_NO_EXPORT PyNumberMethods array_as_number = {
     (unaryfunc)array_index,                     /*nb_index */
 #if PY_VERSION_HEX >= 0x03050000
     (binaryfunc)array_matrix_multiply,          /*nb_matrix_multiply*/
-    (binaryfunc)NULL,                           /*nb_inplacematrix_multiply*/
+    (binaryfunc)array_inplace_matrix_multiply,  /*nb_inplace_matrix_multiply*/
 #endif
 };

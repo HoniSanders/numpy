@@ -80,7 +80,7 @@ def ix_(*args):
             new = new.astype(_nx.intp)
         if issubdtype(new.dtype, _nx.bool_):
             new, = new.nonzero()
-        new.shape = (1,)*k + (new.size,) + (1,)*(nd-k-1)
+        new = new.reshape((1,)*k + (new.size,) + (1,)*(nd-k-1))
         out.append(new)
     return tuple(out)
 
@@ -681,7 +681,7 @@ def fill_diagonal(a, val, wrap=False):
     wrap : bool
       For tall matrices in NumPy version up to 1.6.2, the
       diagonal "wrapped" after N columns. You can have this behavior
-      with this option. This affect only tall matrices.
+      with this option. This affects only tall matrices.
 
     See also
     --------

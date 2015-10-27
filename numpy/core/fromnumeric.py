@@ -848,7 +848,7 @@ def argsort(a, axis=-1, kind='quicksort', order=None):
     -------
     index_array : ndarray, int
         Array of indices that sort `a` along the specified axis.
-        In other words, ``a[index_array]`` yields a sorted `a`.
+        If `a` is one-dimensional, ``a[index_array]`` yields a sorted `a`.
 
     See Also
     --------
@@ -1049,9 +1049,10 @@ def searchsorted(a, v, side='left', sorter=None):
         If 'right', return the last such index.  If there is no suitable
         index, return either 0 or N (where N is the length of `a`).
     sorter : 1-D array_like, optional
-        .. versionadded:: 1.7.0
         Optional array of integer indices that sort array a into ascending
         order. They are typically the result of argsort.
+
+        .. versionadded:: 1.7.0
 
     Returns
     -------
@@ -1370,7 +1371,7 @@ def trace(a, offset=0, axis1=0, axis2=1, dtype=None, out=None):
 
 
 def ravel(a, order='C'):
-    """Return a flattened array.
+    """Return a contiguous flattened array.
 
     A 1-D array, containing the elements of the input, is returned.  A copy is
     made only if needed.
@@ -1414,6 +1415,7 @@ def ravel(a, order='C'):
     ndarray.flat : 1-D iterator over an array.
     ndarray.flatten : 1-D array copy of the elements of an array
                       in row-major order.
+    ndarray.reshape : Change the shape of an array without changing its data.
 
     Notes
     -----
@@ -1423,6 +1425,9 @@ def ravel(a, order='C'):
     implies that the index along the first axis varies slowest, and
     the index along the last quickest.  The opposite holds for
     column-major, Fortran-style index ordering.
+
+    When a view is desired in as many cases as possible, ``arr.reshape(-1)``
+    may be preferable.
 
     Examples
     --------
@@ -2068,7 +2073,7 @@ def cumsum(a, axis=None, dtype=None, out=None):
 
     trapz : Integration of array values using the composite trapezoidal rule.
 
-    diff :  Calculate the n-th order discrete difference along given axis.
+    diff :  Calculate the n-th discrete difference along given axis.
 
     Notes
     -----

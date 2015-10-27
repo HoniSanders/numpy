@@ -27,6 +27,7 @@ from numpy.core.multiarray import _insert, add_docstring
 from numpy.core.multiarray import digitize, bincount, interp as compiled_interp
 from numpy.core.umath import _add_newdoc_ufunc as add_newdoc_ufunc
 from numpy.compat import long
+from numpy.compat.py3k import basestring
 
 # Force range to be a generator, for np.delete's usage.
 if sys.version_info[0] < 3:
@@ -75,6 +76,91 @@ def iterable(y):
     return 1
 
 
+def _hist_optim_numbins_estimator(a, estimator):
+    """
+    A helper function to be called from histogram to deal with estimating optimal number of bins
+
+    estimator: str
+        If estimator is one of ['auto', 'fd', 'scott', 'rice', 'sturges'] this function
+        will choose the appropriate estimator and return it's estimate for the optimal
+        number of bins.
+    """
+    assert isinstance(estimator, basestring)
+    # private function should not be called otherwise
+
+    if a.size == 0:
+        return 1
+
+    def sturges(x):
+        """
+        Sturges Estimator
+        A very simplistic estimator based on the assumption of normality of the data
+        Poor performance for non-normal data, especially obvious for large X.
+        Depends only on size of the data.
+        """
+        return np.ceil(np.log2(x.size)) + 1
+
+    def rice(x):
+        """
+        Rice Estimator
+        Another simple estimator, with no normality assumption.
+        It has better performance for large data, but tends to overestimate number of bins.
+        The number of bins is proportional to the cube root of data size (asymptotically optimal)
+        Depends only on size of the data
+        """
+        return np.ceil(2 * x.size ** (1.0 / 3))
+
+    def scott(x):
+        """
+        Scott Estimator
+        The binwidth is proportional to the standard deviation of the data and
+        inversely proportional to the cube root of data size (asymptotically optimal)
+
+        """
+        h = 3.5 * x.std() * x.size ** (-1.0 / 3)
+        if h > 0:
+            return np.ceil(x.ptp() / h)
+        return 1
+
+    def fd(x):
+        """
+        Freedman Diaconis rule using Inter Quartile Range (IQR) for binwidth
+        Considered a variation of the Scott rule with more robustness as the IQR
+        is less affected by outliers than the standard deviation. However the IQR depends on
+        fewer points than the sd so it is less accurate, especially for long tailed distributions.
+
+        If the IQR is 0, we return 1 for the number of bins.
+        Binwidth is inversely proportional to the cube root of data size (asymptotically optimal)
+        """
+        iqr = np.subtract(*np.percentile(x, [75, 25]))
+
+        if iqr > 0:
+            h = (2 * iqr * x.size ** (-1.0 / 3))
+            return np.ceil(x.ptp() / h)
+
+        # If iqr is 0, default number of bins is 1
+        return 1
+
+    def auto(x):
+        """
+        The FD estimator is usually the most robust method, but it tends to be too small
+        for small X. The Sturges estimator is quite good for small (<1000) datasets and is
+        the default in R.
+        This method gives good off the shelf behaviour.
+        """
+        return max(fd(x), sturges(x))
+
+    optimal_numbins_methods = {'sturges': sturges, 'rice': rice, 'scott': scott,
+                               'fd': fd, 'auto': auto}
+    try:
+        estimator_func = optimal_numbins_methods[estimator.lower()]
+    except KeyError:
+        raise ValueError("{0} not a valid method for `bins`".format(estimator))
+    else:
+        # these methods return floats, np.histogram requires an int
+        return int(estimator_func(a))
+
+
 def histogram(a, bins=10, range=None, normed=False, weights=None,
               density=None):
     """
@@ -84,11 +170,37 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
     ----------
     a : array_like
         Input data. The histogram is computed over the flattened array.
-    bins : int or sequence of scalars, optional
+    bins : int or sequence of scalars or str, optional
         If `bins` is an int, it defines the number of equal-width
         bins in the given range (10, by default). If `bins` is a sequence,
         it defines the bin edges, including the rightmost edge, allowing
         for non-uniform bin widths.
+
+        .. versionadded:: 1.11.0
+
+        If `bins` is a string from the list below, `histogram` will use the method
+        chosen to calculate the optimal number of bins (see Notes for more detail
+        on the estimators). For visualisation, we suggest using the 'auto' option.
+
+        'auto'
+            Maximum of the 'sturges' and 'fd' estimators. Provides good all round performance
+
+        'fd' (Freedman Diaconis Estimator)
+            Robust (resilient to outliers) estimator that takes into account data
+            variability and data size .
+
+        'scott'
+            Less robust estimator that that takes into account data
+            variability and data size.
+
+        'rice'
+            Estimator does not take variability into account, only data size.
+            Commonly overestimates number of bins required.
+
+        'sturges'
+            R's default method, only accounts for data size. Only optimal for
+            gaussian data and underestimates number of bins for large non-gaussian datasets.
+
     range : (float, float), optional
         The lower and upper range of the bins.  If not provided, range
         is simply ``(a.min(), a.max())``.  Values outside the range are
@@ -140,6 +252,48 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
     second ``[2, 3)``.  The last bin, however, is ``[3, 4]``, which *includes*
     4.
 
+    .. versionadded:: 1.11.0
+
+    The methods to estimate the optimal number of bins are well found in literature,
+    and are inspired by the choices R provides for histogram visualisation.
+    Note that having the number of bins proportional to :math:`n^{1/3}` is asymptotically optimal,
+    which is why it appears in most estimators.
+    These are simply plug-in methods that give good starting points for number of bins.
+    In the equations below, :math:`h` is the binwidth and :math:`n_h` is the number of bins
+
+    'Auto' (maximum of the 'Sturges' and 'FD' estimators)
+        A compromise to get a good value. For small datasets the sturges
+        value will usually be chosen, while larger datasets will usually default to FD.
+        Avoids the overly conservative behaviour of FD and Sturges for small and
+        large datasets respectively. Switchover point is usually x.size~1000.
+
+    'FD' (Freedman Diaconis Estimator)
+        .. math:: h = 2 \\frac{IQR}{n^{-1/3}}
+        The binwidth is proportional to the interquartile range (IQR)
+        and inversely proportional to cube root of a.size. Can be too
+        conservative for small datasets, but is quite good
+        for large datasets. The IQR is very robust to outliers.
+
+    'Scott'
+        .. math:: h = \\frac{3.5\\sigma}{n^{-1/3}}
+        The binwidth is proportional to the standard deviation (sd) of the data
+        and inversely proportional to cube root of a.size. Can be too
+        conservative for small datasets, but is quite good
+        for large datasets. The sd is not very robust to outliers. Values
+        are very similar to the Freedman Diaconis Estimator in the absence of outliers.
+
+    'Rice'
+        .. math:: n_h = \\left\\lceil 2n^{1/3} \\right\\rceil
+        The number of bins is only proportional to cube root of a.size.
+        It tends to overestimate the number of bins
+        and it does not take into account data variability.
+
+    'Sturges'
+        .. math:: n_h = \\left\\lceil \\log _{2}n+1 \\right\\rceil
+        The number of bins is the base2 log of a.size.
+        This estimator assumes normality of data and is too conservative for larger,
+        non-normal datasets. This is the default method in R's `hist` method.
+
     Examples
     --------
     >>> np.histogram([1, 2, 1], bins=[0, 1, 2, 3])
@@ -158,6 +312,16 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
     >>> np.sum(hist*np.diff(bin_edges))
     1.0
 
+    .. versionadded:: 1.11.0
+
+    Automated Bin Selection Methods example, using 2 peak random data with 2000 points
+
+    >>> import matplotlib.pyplot as plt
+    >>> rng = np.random.RandomState(10)  # deterministic random data
+    >>> a = np.hstack((rng.normal(size = 1000), rng.normal(loc = 5, scale = 2, size = 1000)))
+    >>> plt.hist(a, bins = 'auto')  # plt.hist passes it's arguments to np.histogram
+    >>> plt.title("Histogram with 'auto' bins")
+    >>> plt.show()
     """
 
     a = asarray(a)
@@ -175,6 +339,21 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
             raise AttributeError(
                 'max must be larger than min in range parameter.')
 
+    if isinstance(bins, basestring):
+        bins = _hist_optim_numbins_estimator(a, bins)
+        # if `bins` is a string for an automatic method,
+        # this will replace it with the number of bins calculated
+
+    # Histogram is an integer or a float array depending on the weights.
+    if weights is None:
+        ntype = np.dtype(np.intp)
+    else:
+        ntype = weights.dtype
+
+    # We set a block size, as this allows us to iterate over chunks when
+    # computing histograms, to minimize memory usage.
+    BLOCK = 65536
+
     if not iterable(bins):
         if np.isscalar(bins) and bins < 1:
             raise ValueError(
@@ -189,6 +368,56 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
         if mn == mx:
             mn -= 0.5
             mx += 0.5
+        # At this point, if the weights are not integer, floating point, or
+        # complex, we have to use the slow algorithm.
+        if weights is not None and not (np.can_cast(weights.dtype, np.double) or
+                                        np.can_cast(weights.dtype, np.complex)):
+            bins = linspace(mn, mx, bins + 1, endpoint=True)
+
+    if not iterable(bins):
+        # We now convert values of a to bin indices, under the assumption of
+        # equal bin widths (which is valid here).
+
+        # Initialize empty histogram
+        n = np.zeros(bins, ntype)
+        # Pre-compute histogram scaling factor
+        norm = bins / (mx - mn)
+
+        # We iterate over blocks here for two reasons: the first is that for
+        # large arrays, it is actually faster (for example for a 10^8 array it
+        # is 2x as fast) and it results in a memory footprint 3x lower in the
+        # limit of large arrays.
+        for i in arange(0, len(a), BLOCK):
+            tmp_a = a[i:i+BLOCK]
+            if weights is None:
+                tmp_w = None
+            else:
+                tmp_w = weights[i:i + BLOCK]
+
+            # Only include values in the right range
+            keep = (tmp_a >= mn)
+            keep &= (tmp_a <= mx)
+            if not np.logical_and.reduce(keep):
+                tmp_a = tmp_a[keep]
+                if tmp_w is not None:
+                    tmp_w = tmp_w[keep]
+            tmp_a = tmp_a.astype(float)
+            tmp_a -= mn
+            tmp_a *= norm
+
+            # Compute the bin indices, and for values that lie exactly on mx we
+            # need to subtract one
+            indices = tmp_a.astype(np.intp)
+            indices[indices == bins] -= 1
+
+            # We now compute the histogram using bincount
+            if ntype.kind == 'c':
+                n.real += np.bincount(indices, weights=tmp_w.real, minlength=bins)
+                n.imag += np.bincount(indices, weights=tmp_w.imag, minlength=bins)
+            else:
+                n += np.bincount(indices, weights=tmp_w, minlength=bins).astype(ntype)
+
+        # We now compute the bin edges since these are returned
         bins = linspace(mn, mx, bins + 1, endpoint=True)
     else:
         bins = asarray(bins)
@@ -196,33 +425,29 @@ def histogram(a, bins=10, range=None, normed=False, weights=None,
             raise AttributeError(
                 'bins must increase monotonically.')
 
-    # Histogram is an integer or a float array depending on the weights.
-    if weights is None:
-        ntype = int
-    else:
-        ntype = weights.dtype
-    n = np.zeros(bins.shape, ntype)
+        # Initialize empty histogram
+        n = np.zeros(bins.shape, ntype)
 
-    block = 65536
-    if weights is None:
-        for i in arange(0, len(a), block):
-            sa = sort(a[i:i+block])
-            n += np.r_[sa.searchsorted(bins[:-1], 'left'),
-                       sa.searchsorted(bins[-1], 'right')]
-    else:
-        zero = array(0, dtype=ntype)
-        for i in arange(0, len(a), block):
-            tmp_a = a[i:i+block]
-            tmp_w = weights[i:i+block]
-            sorting_index = np.argsort(tmp_a)
-            sa = tmp_a[sorting_index]
-            sw = tmp_w[sorting_index]
-            cw = np.concatenate(([zero, ], sw.cumsum()))
-            bin_index = np.r_[sa.searchsorted(bins[:-1], 'left'),
-                              sa.searchsorted(bins[-1], 'right')]
-            n += cw[bin_index]
+        if weights is None:
+            for i in arange(0, len(a), BLOCK):
+                sa = sort(a[i:i+BLOCK])
+                n += np.r_[sa.searchsorted(bins[:-1], 'left'),
+                           sa.searchsorted(bins[-1], 'right')]
+        else:
+            zero = array(0, dtype=ntype)
+            for i in arange(0, len(a), BLOCK):
+                tmp_a = a[i:i+BLOCK]
+                tmp_w = weights[i:i+BLOCK]
+                sorting_index = np.argsort(tmp_a)
+                sa = tmp_a[sorting_index]
+                sw = tmp_w[sorting_index]
+                cw = np.concatenate(([zero, ], sw.cumsum()))
+                bin_index = np.r_[sa.searchsorted(bins[:-1], 'left'),
+                                  sa.searchsorted(bins[-1], 'right')]
+                n += cw[bin_index]
 
-    n = np.diff(n)
+
+        n = np.diff(n)
 
     if density is not None:
         if density:
@@ -897,19 +1122,28 @@ def gradient(f, *varargs, **kwargs):
     ----------
     f : array_like
         An N-dimensional array containing samples of a scalar function.
-    varargs : list of scalar, optional
+    varargs : scalar or list of scalar, optional
         N scalars specifying the sample distances for each dimension,
         i.e. `dx`, `dy`, `dz`, ... Default distance: 1.
+        single scalar specifies sample distance for all dimensions.
+        if `axis` is given, the number of varargs must equal the number of axes.
     edge_order : {1, 2}, optional
         Gradient is calculated using N\ :sup:`th` order accurate differences
         at the boundaries. Default: 1.
 
         .. versionadded:: 1.9.1
 
+    axis : None or int or tuple of ints, optional
+        Gradient is calculated only along the given axis or axes
+        The default (axis = None) is to calculate the gradient for all the axes of the input array.
+        axis may be negative, in which case it counts from the last to the first axis.
+
+        .. versionadded:: 1.11.0
+
     Returns
     -------
     gradient : list of ndarray
-        Each element of `list` has the same shape as `f` giving the derivative 
+        Each element of `list` has the same shape as `f` giving the derivative
         of `f` with respect to each dimension.
 
     Examples
@@ -920,10 +1154,10 @@ def gradient(f, *varargs, **kwargs):
     >>> np.gradient(x, 2)
     array([ 0.5 ,  0.75,  1.25,  1.75,  2.25,  2.5 ])
 
-    For two dimensional arrays, the return will be two arrays ordered by 
-    axis. In this example the first array stands for the gradient in 
+    For two dimensional arrays, the return will be two arrays ordered by
+    axis. In this example the first array stands for the gradient in
     rows and the second one in columns direction:
-    
+
     >>> np.gradient(np.array([[1, 2, 6], [3, 4, 5]], dtype=np.float))
     [array([[ 2.,  2., -1.],
             [ 2.,  2., -1.]]), array([[ 1. ,  2.5,  4. ],
@@ -934,15 +1168,38 @@ def gradient(f, *varargs, **kwargs):
     >>> y = x**2
     >>> np.gradient(y, dx, edge_order=2)
     array([-0.,  2.,  4.,  6.,  8.])
+
+    The axis keyword can be used to specify a subset of axes of which the gradient is calculated
+    >>> np.gradient(np.array([[1, 2, 6], [3, 4, 5]], dtype=np.float), axis=0)
+    array([[ 2.,  2., -1.],
+           [ 2.,  2., -1.]])
     """
     f = np.asanyarray(f)
     N = len(f.shape)  # number of dimensions
+
+    axes = kwargs.pop('axis', None)
+    if axes is None:
+        axes = tuple(range(N))
+    # check axes to have correct type and no duplicate entries
+    if isinstance(axes, int):
+        axes = (axes,)
+    if not isinstance(axes, tuple):
+        raise TypeError("A tuple of integers or a single integer is required")
+
+    # normalize axis values:
+    axes = tuple(x + N if x < 0 else x for x in axes)
+    if max(axes) >= N or min(axes) < 0:
+        raise ValueError("'axis' entry is out of bounds")
+
+    if len(set(axes)) != len(axes):
+        raise ValueError("duplicate value in 'axis'")
+
     n = len(varargs)
     if n == 0:
         dx = [1.0]*N
     elif n == 1:
         dx = [varargs[0]]*N
-    elif n == N:
+    elif n == len(axes):
         dx = list(varargs)
     else:
         raise SyntaxError(
@@ -986,7 +1243,7 @@ def gradient(f, *varargs, **kwargs):
     else:
         y = f
 
-    for axis in range(N):
+    for i, axis in enumerate(axes):
 
         if y.shape[axis] < 2:
             raise ValueError(
@@ -1042,7 +1299,7 @@ def gradient(f, *varargs, **kwargs):
             out[slice1] = (3.0*y[slice2] - 4.0*y[slice3] + y[slice4])/2.0
 
         # divide by step size
-        out /= dx[axis]
+        out /= dx[i]
         outvals.append(out)
 
         # reset the slice object in this dimension to ":"
@@ -1051,7 +1308,7 @@ def gradient(f, *varargs, **kwargs):
         slice3[axis] = slice(None)
         slice4[axis] = slice(None)
 
-    if N == 1:
+    if len(axes) == 1:
         return outvals[0]
     else:
         return outvals
@@ -1059,10 +1316,10 @@ def gradient(f, *varargs, **kwargs):
 
 def diff(a, n=1, axis=-1):
     """
-    Calculate the n-th order discrete difference along given axis.
+    Calculate the n-th discrete difference along given axis.
 
-    The first order difference is given by ``out[n] = a[n+1] - a[n]`` along
-    the given axis, higher order differences are calculated by using `diff`
+    The first difference is given by ``out[n] = a[n+1] - a[n]`` along
+    the given axis, higher differences are calculated by using `diff`
     recursively.
 
     Parameters
@@ -1077,8 +1334,9 @@ def diff(a, n=1, axis=-1):
     Returns
     -------
     diff : ndarray
-        The `n` order differences. The shape of the output is the same as `a`
+        The n-th differences. The shape of the output is the same as `a`
         except along `axis` where the dimension is smaller by `n`.
+.
 
     See Also
     --------
@@ -1146,10 +1404,11 @@ def interp(x, xp, fp, left=None, right=None, period=None):
         Value to return for `x > xp[-1]`, default is `fp[-1]`.
 
     period : None or float, optional
-        .. versionadded:: 1.10.0
         A period for the x-coordinates. This parameter allows the proper
         interpolation of angular x-coordinates. Parameters `left` and `right`
         are ignored if `period` is specified.
+
+        .. versionadded:: 1.10.0
 
     Returns
     -------
@@ -1863,22 +2122,25 @@ def cov(m, y=None, rowvar=1, bias=0, ddof=None, fweights=None, aweights=None):
         normalization is by ``N``. These values can be overridden by using the
         keyword ``ddof`` in numpy versions >= 1.5.
     ddof : int, optional
-        .. versionadded:: 1.5
         If not ``None`` the default value implied by `bias` is overridden.
         Note that ``ddof=1`` will return the unbiased estimate, even if both
         `fweights` and `aweights` are specified, and ``ddof=0`` will return
         the simple average. See the notes for the details. The default value
         is ``None``.
+
+        .. versionadded:: 1.5
     fweights : array_like, int, optional
-        .. versionadded:: 1.10
         1-D array of integer freguency weights; the number of times each
         observation vector should be repeated.
-    aweights : array_like, optional
+
         .. versionadded:: 1.10
+    aweights : array_like, optional
         1-D array of observation vector weights. These relative weights are
         typically large for observations considered "important" and smaller for
         observations considered less "important". If ``ddof=0`` the array of
         weights can be used to assign probabilities to observation vectors.
+
+        .. versionadded:: 1.10
 
     Returns
     -------
@@ -2007,7 +2269,7 @@ def cov(m, y=None, rowvar=1, bias=0, ddof=None, fweights=None, aweights=None):
 
     # Determine the normalization
     if w is None:
-        fact = float(X.shape[1] - ddof)
+        fact = X.shape[1] - ddof
     elif ddof == 0:
         fact = w_sum
     elif aweights is None:
@@ -2024,7 +2286,9 @@ def cov(m, y=None, rowvar=1, bias=0, ddof=None, fweights=None, aweights=None):
         X_T = X.T
     else:
         X_T = (X*w).T
-    return (dot(X, X_T.conj())/fact).squeeze()
+    c = dot(X, X_T.conj())
+    c *= 1. / np.float64(fact)
+    return c.squeeze()
 
 
 def corrcoef(x, y=None, rowvar=1, bias=np._NoValue, ddof=np._NoValue):
@@ -2054,11 +2318,13 @@ def corrcoef(x, y=None, rowvar=1, bias=np._NoValue, ddof=np._NoValue):
         is transposed: each column represents a variable, while the rows
         contain observations.
     bias : _NoValue, optional
+        Has no effect, do not use.
+
         .. deprecated:: 1.10.0
-        Has no affect, do not use.
     ddof : _NoValue, optional
+        Has no effect, do not use.
+
         .. deprecated:: 1.10.0
-        Has no affect, do not use.
 
     Returns
     -------
@@ -2078,7 +2344,7 @@ def corrcoef(x, y=None, rowvar=1, bias=np._NoValue, ddof=np._NoValue):
     """
     if bias is not np._NoValue or ddof is not np._NoValue:
         # 2015-03-15, 1.10
-        warnings.warn('bias and ddof have no affect and are deprecated',
+        warnings.warn('bias and ddof have no effect and are deprecated',
                       DeprecationWarning)
     c = cov(x, y, rowvar)
     try:
@@ -2086,7 +2352,11 @@ def corrcoef(x, y=None, rowvar=1, bias=np._NoValue, ddof=np._NoValue):
     except ValueError:  # scalar covariance
         # nan if incorrect value (nan, inf, 0), 1 otherwise
         return c / c
-    return c / sqrt(multiply.outer(d, d))
+    d = sqrt(d)
+    # calculate "c / multiply.outer(d, d)" row-wise ... for memory and speed
+    for i in range(0, d.size):
+        c[i,:] /= (d * d[i])
+    return c
 
 
 def blackman(M):
@@ -3069,7 +3339,7 @@ def _median(a, axis=None, out=None, overwrite_input=False):
         indexer[axis] = slice(index-1, index+1)
 
     # Check if the array contains any nan's
-    if np.issubdtype(a.dtype, np.inexact):
+    if np.issubdtype(a.dtype, np.inexact) and sz > 0:
         # warn and return nans like mean would
         rout = mean(part[indexer], axis=axis, out=out)
         part = np.rollaxis(part, axis, part.ndim)
@@ -3141,7 +3411,7 @@ def percentile(a, q, axis=None, out=None,
     keepdims : bool, optional
         If this is set to True, the axes which are reduced are left
         in the result as dimensions with size one. With this option,
-        the result will broadcast correctly against the original `arr`.
+        the result will broadcast correctly against the original array `a`.
 
         .. versionadded:: 1.9.0
 

@@ -37,52 +37,6 @@ __all__ = [
     ]
 
 
-def seek_gzip_factory(f):
-    """Use this factory to produce the class so that we can do a lazy
-    import on gzip.
-
-    """
-    import gzip
-
-    class GzipFile(gzip.GzipFile):
-
-        def seek(self, offset, whence=0):
-            # figure out new position (we can only seek forwards)
-            if whence == 1:
-                offset = self.offset + offset
-
-            if whence not in [0, 1]:
-                raise IOError("Illegal argument")
-
-            if offset < self.offset:
-                # for negative seek, rewind and do positive seek
-                self.rewind()
-                count = offset - self.offset
-                for i in range(count // 1024):
-                    self.read(1024)
-                self.read(count % 1024)
-
-        def tell(self):
-            return self.offset
-
-    if isinstance(f, str):
-        f = GzipFile(f)
-    elif isinstance(f, gzip.GzipFile):
-        # cast to our GzipFile if its already a gzip.GzipFile
-
-        try:
-            name = f.name
-        except AttributeError:
-            # Backward compatibility for <= 2.5
-            name = f.filename
-        mode = f.mode
-
-        f = GzipFile(fileobj=f.fileobj, filename=name)
-        f.mode = mode
-
-    return f
-
-
 class BagObj(object):
     """
     BagObj(obj)
@@ -407,8 +361,6 @@ def load(file, mmap_mode=None, allow_pickle=True, fix_imports=True,
     if isinstance(file, basestring):
         fid = open(file, "rb")
         own_fid = True
-    elif isinstance(file, gzip.GzipFile):
-        fid = seek_gzip_factory(file)
     else:
         fid = file
 
@@ -715,6 +667,8 @@ def _getconv(dtype):
         return np.int64
     if issubclass(typ, np.integer):
         return lambda x: int(float(x))
+    elif issubclass(typ, np.longdouble):
+        return np.longdouble
     elif issubclass(typ, np.floating):
         return floatconv
     elif issubclass(typ, np.complex):
@@ -793,6 +747,7 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None,
     lines with missing values.
 
     .. versionadded:: 1.10.0
+
     The strings produced by the Python float.hex method can be used as
     input for floats.
 
@@ -839,7 +794,8 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None,
         if _is_string_like(fname):
             fown = True
             if fname.endswith('.gz'):
-                fh = iter(seek_gzip_factory(fname))
+                import gzip
+                fh = iter(gzip.GzipFile(fname))
             elif fname.endswith('.bz2'):
                 import bz2
                 fh = iter(bz2.BZ2File(fname))
@@ -1315,10 +1271,11 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None,
 
     Parameters
     ----------
-    fname : file or str
-        File, filename, or generator to read.  If the filename extension is
-        `.gz` or `.bz2`, the file is first decompressed. Note that
-        generators must return byte strings in Python 3k.
+    fname : file, str, list of str, generator
+        File, filename, list, or generator to read.  If the filename
+        extension is `.gz` or `.bz2`, the file is first decompressed. Mote
+        that generators must return byte strings in Python 3k.  The strings
+        in a list or produced by a generator are treated as lines.
     dtype : dtype, optional
         Data type of the resulting array.
         If None, the dtypes will be determined by the contents of each
@@ -1499,8 +1456,8 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None,
             fhd = iter(fname)
     except TypeError:
         raise TypeError(
-            "fname must be a string, filehandle, or generator. "
-            "(got %s instead)" % type(fname))
+            "fname must be a string, filehandle, list of strings, "
+            "or generator. Got %s instead." % type(fname))
 
     split_line = LineSplitter(delimiter=delimiter, comments=comments,
                               autostrip=autostrip)._handyman
