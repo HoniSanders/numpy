@@ -82,7 +82,7 @@ real-dist: dist-build html html-scipyorg
 
 dist-build:
 	rm -f ../dist/*.egg
-	cd .. && $(PYTHON) setupegg.py bdist_egg
+	cd .. && $(PYTHON) setup.py bdist_egg
 	install -d $(subst :, ,$(INSTALL_PPH))
 	$(PYTHON) `which easy_install` --prefix=$(INSTALL_DIR) ../dist/*.egg
 
@@ -101,7 +101,7 @@ upload:
 	ssh $(USERNAME)@new.scipy.org mv $(UPLOAD_DIR)/numpy-html.zip \
 	    $(UPLOAD_DIR)/numpy-html-$(RELEASE).zip
 	ssh $(USERNAME)@new.scipy.org rm $(UPLOAD_DIR)/dist.tar.gz
-	ssh $(USERNAME)@new.scipy.org cp -r $(UPLOAD_DIR)/* /srv/docs_scipy_org/doc/numpy
+	ssh $(USERNAME)@new.scipy.org ln -snf numpy-$(RELEASE) /srv/docs_scipy_org/doc/numpy
 	ssh $(USERNAME)@new.scipy.org /srv/bin/fixperm-scipy_org.sh
 
 #------------------------------------------------------------------------------

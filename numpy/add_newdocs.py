@@ -49,7 +49,7 @@ add_newdoc('numpy.core', 'flatiter',
     >>> type(fl)
     <type 'numpy.flatiter'>
     >>> for item in fl:
-    ...     print item
+    ...     print(item)
     ...
     0
     1
@@ -262,7 +262,7 @@ add_newdoc('numpy.core', 'nditer',
     has_multi_index : bool
         If True, the iterator was created with the "multi_index" flag,
         and the property `multi_index` can be used to retrieve it.
-    index :
+    index
         When the "c_index" or "f_index" flag was used, this property
         provides access to the index. Raises a ValueError if accessed
         and `has_index` is False.
@@ -273,10 +273,10 @@ add_newdoc('numpy.core', 'nditer',
         An index which matches the order of iteration.
     itersize : int
         Size of the iterator.
-    itviews :
+    itviews
         Structured view(s) of `operands` in memory, matching the reordered
         and optimized iterator access pattern.
-    multi_index :
+    multi_index
         When the "multi_index" flag was used, this property
         provides access to the index. Raises a ValueError if accessed
         accessed and `has_multi_index` is False.
@@ -288,7 +288,7 @@ add_newdoc('numpy.core', 'nditer',
         The array(s) to be iterated over.
     shape : tuple of ints
         Shape tuple, the shape of the iterator.
-    value :
+    value
         Value of `operands` at current iteration. Normally, this is a
         tuple of array scalars, but if the flag "external_loop" is used,
         it is a tuple of one dimensional arrays.
@@ -480,6 +480,11 @@ add_newdoc('numpy.core', 'broadcast',
         return an object that encapsulates the result.
         Amongst others, it has ``shape`` and ``nd`` properties, and
         may be used as an iterator.
+
+    See Also
+    --------
+    broadcast_arrays
+    broadcast_to
 
     Examples
     --------
@@ -686,7 +691,7 @@ add_newdoc('numpy.core.multiarray', 'array',
 
     See Also
     --------
-    empty, empty_like, zeros, zeros_like, ones, ones_like, fill
+    empty, empty_like, zeros, zeros_like, ones, ones_like, full, full_like
 
     Examples
     --------
@@ -1548,7 +1553,7 @@ add_newdoc('numpy.core.multiarray', 'lexsort',
     >>> a = [1,5,1,4,3,4,4] # First column
     >>> b = [9,4,0,4,0,2,1] # Second column
     >>> ind = np.lexsort((b,a)) # Sort by a, then by b
-    >>> print ind
+    >>> print(ind)
     [2 0 4 6 5 3 1]
 
     >>> [(a[i],b[i]) for i in ind]
@@ -3466,7 +3471,7 @@ add_newdoc('numpy.core.multiarray', 'ndarray', ('diagonal',
 
     Return specified diagonals. In NumPy 1.9 the returned array is a
     read-only view instead of a copy as in previous NumPy versions.  In
-    NumPy 1.10 the read-only restriction will be removed.
+    a future version the read-only restriction will be removed.
 
     Refer to :func:`numpy.diagonal` for full documentation.
 
@@ -3567,10 +3572,14 @@ add_newdoc('numpy.core.multiarray', 'ndarray', ('flatten',
 
     Parameters
     ----------
-    order : {'C', 'F', 'A'}, optional
-        Whether to flatten in row-major (C-style) or
-        column-major (Fortran-style) order or preserve the
-        C/Fortran ordering from `a`.  The default is 'C'.
+    order : {'C', 'F', 'A', 'K'}, optional
+        'C' means to flatten in row-major (C-style) order.
+        'F' means to flatten in column-major (Fortran-
+        style) order. 'A' means to flatten in column-major
+        order if `a` is Fortran *contiguous* in memory,
+        row-major order otherwise. 'K' means to flatten
+        `a` in the order the elements occur in memory.
+        The default is 'C'.
 
     Returns
     -------
@@ -3826,6 +3835,45 @@ add_newdoc('numpy.core.multiarray', 'shares_memory',
     """)
 
 
+add_newdoc('numpy.core.multiarray', 'may_share_memory',
+    """
+    may_share_memory(a, b, max_work=None)
+
+    Determine if two arrays might share memory
+
+    A return of True does not necessarily mean that the two arrays
+    share any element.  It just means that they *might*.
+
+    Only the memory bounds of a and b are checked by default.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Input arrays
+    max_work : int, optional
+        Effort to spend on solving the overlap problem.  See
+        `shares_memory` for details.  Default for ``may_share_memory``
+        is to do a bounds check.
+
+    Returns
+    -------
+    out : bool
+
+    See Also
+    --------
+    shares_memory
+
+    Examples
+    --------
+    >>> np.may_share_memory(np.array([1,2]), np.array([5,8,9]))
+    False
+    >>> x = np.zeros([3, 4])
+    >>> np.may_share_memory(x[:,0], x[:,1])
+    True
+
+    """)
+
+
 add_newdoc('numpy.core.multiarray', 'ndarray', ('newbyteorder',
     """
     arr.newbyteorder(new_order='S')
@@ -3845,13 +3893,13 @@ add_newdoc('numpy.core.multiarray', 'ndarray', ('newbyteorder',
     ----------
     new_order : string, optional
         Byte order to force; a value from the byte order specifications
-        above. `new_order` codes can be any of::
+        below. `new_order` codes can be any of:
 
-         * 'S' - swap dtype from current to opposite endian
-         * {'<', 'L'} - little endian
-         * {'>', 'B'} - big endian
-         * {'=', 'N'} - native order
-         * {'|', 'I'} - ignore (no change to byte order)
+        * 'S' - swap dtype from current to opposite endian
+        * {'<', 'L'} - little endian
+        * {'>', 'B'} - big endian
+        * {'=', 'N'} - native order
+        * {'|', 'I'} - ignore (no change to byte order)
 
         The default value ('S') results in swapping the current
         byte order. The code does a case-insensitive check on the first
@@ -4730,7 +4778,7 @@ add_newdoc('numpy.core.multiarray', 'ndarray', ('view',
     >>> y = x.view(dtype=np.int16, type=np.matrix)
     >>> y
     matrix([[513]], dtype=int16)
-    >>> print type(y)
+    >>> print(type(y))
     <class 'numpy.matrixlib.defmatrix.matrix'>
 
     Creating a view on a structured array so it can be used in calculations
@@ -4746,7 +4794,7 @@ add_newdoc('numpy.core.multiarray', 'ndarray', ('view',
     Making changes to the view changes the underlying array
 
     >>> xv[0,1] = 20
-    >>> print x
+    >>> print(x)
     [(1, 20) (3, 4)]
 
     Using a view to convert an array to a recarray:
@@ -4808,6 +4856,10 @@ add_newdoc('numpy.core.umath', 'frompyfunc',
     -------
     out : ufunc
         Returns a Numpy universal function (``ufunc``) object.
+
+    See Also
+    --------
+    vectorize : evaluates pyfunc over input arrays using broadcasting rules of numpy
 
     Notes
     -----
@@ -4872,7 +4924,7 @@ add_newdoc('numpy.core.umath', 'geterrobj',
     [10000, 0, None]
 
     >>> def err_handler(type, flag):
-    ...     print "Floating point error (%s), with flag %s" % (type, flag)
+    ...     print("Floating point error (%s), with flag %s" % (type, flag))
     ...
     >>> old_bufsize = np.setbufsize(20000)
     >>> old_err = np.seterr(divide='raise')
@@ -4936,7 +4988,7 @@ add_newdoc('numpy.core.umath', 'seterrobj',
     [10000, 0, None]
 
     >>> def err_handler(type, flag):
-    ...     print "Floating point error (%s), with flag %s" % (type, flag)
+    ...     print("Floating point error (%s), with flag %s" % (type, flag))
     ...
     >>> new_errobj = [20000, 12, err_handler]
     >>> np.seterrobj(new_errobj)
@@ -5021,7 +5073,7 @@ add_newdoc('numpy.core.multiarray', 'digitize',
     >>> inds
     array([1, 4, 3, 2])
     >>> for n in range(x.size):
-    ...   print bins[inds[n]-1], "<=", x[n], "<", bins[inds[n]]
+    ...   print(bins[inds[n]-1], "<=", x[n], "<", bins[inds[n]])
     ...
     0.0 <= 0.2 < 1.0
     4.0 <= 6.4 < 10.0
@@ -5430,7 +5482,7 @@ add_newdoc('numpy.core', 'ufunc', ('identity',
     1
     >>> np.power.identity
     1
-    >>> print np.exp.identity
+    >>> print(np.exp.identity)
     None
     """))
 
@@ -6138,7 +6190,7 @@ add_newdoc('numpy.core.multiarray', 'dtype', ('fields',
     Examples
     --------
     >>> dt = np.dtype([('name', np.str_, 16), ('grades', np.float64, (2,))])
-    >>> print dt.fields
+    >>> print(dt.fields)
     {'grades': (dtype(('float64',(2,))), 16), 'name': (dtype('|S16'), 0)}
 
     """))
@@ -6316,16 +6368,15 @@ add_newdoc('numpy.core.multiarray', 'dtype', ('newbyteorder',
     Parameters
     ----------
     new_order : string, optional
-        Byte order to force; a value from the byte order
-        specifications below.  The default value ('S') results in
-        swapping the current byte order.
-        `new_order` codes can be any of::
+        Byte order to force; a value from the byte order specifications
+        below.  The default value ('S') results in swapping the current
+        byte order.  `new_order` codes can be any of:
 
-         * 'S' - swap dtype from current to opposite endian
-         * {'<', 'L'} - little endian
-         * {'>', 'B'} - big endian
-         * {'=', 'N'} - native order
-         * {'|', 'I'} - ignore (no change to byte order)
+        * 'S' - swap dtype from current to opposite endian
+        * {'<', 'L'} - little endian
+        * {'>', 'B'} - big endian
+        * {'=', 'N'} - native order
+        * {'|', 'I'} - ignore (no change to byte order)
 
         The code does a case-insensitive check on the first letter of
         `new_order` for these alternatives.  For example, any of '>'
@@ -7188,10 +7239,10 @@ add_newdoc('numpy.core.numerictypes', 'generic', ('newbyteorder',
 
     The `new_order` code can be any from the following:
 
+    * 'S' - swap dtype from current to opposite endian
     * {'<', 'L'} - little endian
     * {'>', 'B'} - big endian
     * {'=', 'N'} - native order
-    * 'S' - swap dtype from current to opposite endian
     * {'|', 'I'} - ignore (no change to byte order)
 
     Parameters

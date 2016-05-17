@@ -121,6 +121,21 @@ class TestFromrecords(TestCase):
         assert_equal(type(rv), np.recarray)
         assert_equal(rv.dtype.type, np.record)
 
+        #check that getitem also preserves np.recarray and np.record
+        r = np.rec.array(np.ones(4, dtype=[('a', 'i4'), ('b', 'i4'),
+                                           ('c', 'i4,i4')]))
+        assert_equal(r['c'].dtype.type, np.record)
+        assert_equal(type(r['c']), np.recarray)
+        assert_equal(r[['a', 'b']].dtype.type, np.record)
+        assert_equal(type(r[['a', 'b']]), np.recarray)
+
+        #and that it preserves subclasses (gh-6949)
+        class C(np.recarray):
+            pass
+
+        c = r.view(C)
+        assert_equal(type(c['c']), C)
+
         # check that accessing nested structures keep record type, but
         # not for subarrays, non-void structures, non-structured voids
         test_dtype = [('a', 'f4,f4'), ('b', 'V8'), ('c', ('f4',2)),
@@ -283,6 +298,15 @@ class TestRecord(TestCase):
         a = self.data
         assert_equal(a, pickle.loads(pickle.dumps(a)))
         assert_equal(a[0], pickle.loads(pickle.dumps(a[0])))
+
+    def test_pickle_3(self):
+        # Issue #7140
+        a = self.data
+        pa = pickle.loads(pickle.dumps(a[0]))
+        assert_(pa.flags.c_contiguous)
+        assert_(pa.flags.f_contiguous)
+        assert_(pa.flags.writeable)
+        assert_(pa.flags.aligned)
 
     def test_objview_record(self):
         # https://github.com/numpy/numpy/issues/2599

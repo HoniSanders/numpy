@@ -112,7 +112,7 @@ Test the header writing.
     >>> for arr in basic_arrays + record_arrays:
     ...     f = BytesIO()
     ...     format.write_array_header_1_0(f, arr)   # XXX: arr is not a dict, items gets called on it
-    ...     print repr(f.getvalue())
+    ...     print(repr(f.getvalue()))
     ...
     "F\x00{'descr': '|u1', 'fortran_order': False, 'shape': (0,)}              \n"
     "F\x00{'descr': '|u1', 'fortran_order': False, 'shape': ()}                \n"
@@ -287,7 +287,7 @@ import numpy as np
 from numpy.compat import asbytes, asbytes_nested, sixu
 from numpy.testing import (
     run_module_suite, assert_, assert_array_equal, assert_raises, raises,
-    dec
+    dec, SkipTest
     )
 from numpy.lib import format
 
@@ -812,7 +812,6 @@ def test_bad_header():
 
 
 def test_large_file_support():
-    from nose import SkipTest
     if (sys.platform == 'win32' or sys.platform == 'cygwin'):
         raise SkipTest("Unknown if Windows has sparse filesystems")
     # try creating a large sparse file
@@ -835,6 +834,20 @@ def test_large_file_support():
         f.seek(5368709120)
         r = np.load(f)
     assert_array_equal(r, d)
+
+
+@dec.slow
+def test_large_archive():
+    a = np.empty((2 ** 30, 2), dtype=np.uint8)
+    fname = os.path.join(tempdir, "large_archive")
+
+    with open(fname, "wb") as f:
+        np.savez(f, arr=a)
+
+    with open(fname, "rb") as f:
+        new_a = np.load(f)["arr"]
+
+    assert a.shape == new_a.shape
 
 
 if __name__ == "__main__":

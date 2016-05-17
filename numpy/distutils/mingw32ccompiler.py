@@ -172,7 +172,7 @@ class Mingw32CCompiler(distutils.cygwinccompiler.CygwinCCompiler):
              extra_postargs=None,
              build_temp=None,
              target_lang=None):
-        # Include the appropiate MSVC runtime library if Python was built
+        # Include the appropriate MSVC runtime library if Python was built
         # with MSVC >= 7.0 (MinGW standard is msvcrt)
         runtime_library = msvc_runtime_library()
         if runtime_library:
@@ -244,9 +244,7 @@ def find_python_dll():
     # - find it in python main dir
     # - in system32,
     # - ortherwise (Sxs), I don't know how to get it.
-    lib_dirs = []
-    lib_dirs.append(sys.prefix)
-    lib_dirs.append(os.path.join(sys.prefix, 'lib'))
+    lib_dirs = [sys.prefix, os.path.join(sys.prefix, 'lib')]
     try:
         lib_dirs.append(os.path.join(os.environ['SYSTEMROOT'], 'system32'))
     except KeyError:

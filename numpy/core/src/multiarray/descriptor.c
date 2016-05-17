@@ -29,12 +29,27 @@
 #define NPY_NEXT_ALIGNED_OFFSET(offset, alignment) \
                 (((offset) + (alignment) - 1) & (-(alignment)))
 
+#ifndef PyDictProxy_Check
 #define PyDictProxy_Check(obj) (Py_TYPE(obj) == &PyDictProxy_Type)
+#endif
 
 static PyObject *typeDict = NULL;   /* Must be explicitly loaded */
 
 static PyArray_Descr *
 _use_inherit(PyArray_Descr *type, PyObject *newobj, int *errflag);
+
+
+/*
+ * Returns value of PyMapping_GetItemString but as a borrowed reference instead
+ * of a new reference.
+ */
+static PyObject *
+Borrowed_PyMapping_GetItemString(PyObject *o, char *key)
+{
+    PyObject *ret = PyMapping_GetItemString(o, key);
+    Py_XDECREF(ret);
+    return ret;
+}
 
 /*
  * Creates a dtype object from ctypes inputs.
@@ -520,8 +535,6 @@ _convert_from_array_descr(PyObject *obj, int align)
             goto fail;
         }
         dtypeflags |= (conv->flags & NPY_FROM_FIELDS);
-        tup = PyTuple_New((title == NULL ? 2 : 3));
-        PyTuple_SET_ITEM(tup, 0, (PyObject *)conv);
         if (align) {
             int _align;
 
@@ -531,9 +544,9 @@ _convert_from_array_descr(PyObject *obj, int align)
             }
             maxalign = PyArray_MAX(maxalign, _align);
         }
+        tup = PyTuple_New((title == NULL ? 2 : 3));
+        PyTuple_SET_ITEM(tup, 0, (PyObject *)conv);
         PyTuple_SET_ITEM(tup, 1, PyInt_FromLong((long) totalsize));
-
-        PyDict_SetItem(fields, name, tup);
 
         /*
          * Title can be "meta-data".  Only insert it
@@ -543,6 +556,7 @@ _convert_from_array_descr(PyObject *obj, int align)
         if (title != NULL) {
             Py_INCREF(title);
             PyTuple_SET_ITEM(tup, 2, title);
+            PyDict_SetItem(fields, name, tup);
 #if defined(NPY_PY3K)
             if (PyUString_Check(title)) {
 #else
@@ -557,6 +571,10 @@ _convert_from_array_descr(PyObject *obj, int align)
                 PyDict_SetItem(fields, title, tup);
             }
         }
+        else {
+            PyDict_SetItem(fields, name, tup);
+        }
+
         totalsize += conv->elsize;
         Py_DECREF(tup);
     }
@@ -793,10 +811,18 @@ _use_inherit(PyArray_Descr *type, PyObject *newobj, int *errflag)
     }
     new->elsize = conv->elsize;
     if (PyDataType_HASFIELDS(conv)) {
+        Py_XDECREF(new->fields);
         new->fields = conv->fields;
         Py_XINCREF(new->fields);
+
+        Py_XDECREF(new->names);
         new->names = conv->names;
         Py_XINCREF(new->names);
+    }
+    if (conv->metadata != NULL) {
+        Py_XDECREF(new->metadata);
+        new->metadata = conv->metadata;
+        Py_XINCREF(new->metadata);
     }
     new->flags = conv->flags;
     Py_DECREF(conv);
@@ -952,17 +978,19 @@ _convert_from_dict(PyObject *obj, int align)
     if (fields == NULL) {
         return (PyArray_Descr *)PyErr_NoMemory();
     }
-    /* Use PyMapping_GetItemString to support dictproxy objects as well */
-    names = PyMapping_GetItemString(obj, "names");
-    descrs = PyMapping_GetItemString(obj, "formats");
+    /*
+     * Use PyMapping_GetItemString to support dictproxy objects as well.
+     */
+    names = Borrowed_PyMapping_GetItemString(obj, "names");
+    descrs = Borrowed_PyMapping_GetItemString(obj, "formats");
     if (!names || !descrs) {
         Py_DECREF(fields);
         PyErr_Clear();
         return _use_fields_dict(obj, align);
     }
     n = PyObject_Length(names);
-    offsets = PyMapping_GetItemString(obj, "offsets");
-    titles = PyMapping_GetItemString(obj, "titles");
+    offsets = Borrowed_PyMapping_GetItemString(obj, "offsets");
+    titles = Borrowed_PyMapping_GetItemString(obj, "titles");
     if (!offsets || !titles) {
         PyErr_Clear();
     }
@@ -980,7 +1008,7 @@ _convert_from_dict(PyObject *obj, int align)
      * If a property 'aligned' is in the dict, it overrides the align flag
      * to be True if it not already true.
      */
-    tmp = PyMapping_GetItemString(obj, "aligned");
+    tmp = Borrowed_PyMapping_GetItemString(obj, "aligned");
     if (tmp == NULL) {
         PyErr_Clear();
     } else {
@@ -1154,7 +1182,7 @@ _convert_from_dict(PyObject *obj, int align)
     }
 
     /* Override the itemsize if provided */
-    tmp = PyMapping_GetItemString(obj, "itemsize");
+    tmp = Borrowed_PyMapping_GetItemString(obj, "itemsize");
     if (tmp == NULL) {
         PyErr_Clear();
     } else {
@@ -1186,7 +1214,7 @@ _convert_from_dict(PyObject *obj, int align)
     }
 
     /* Add the metadata if provided */
-    metadata = PyMapping_GetItemString(obj, "metadata");
+    metadata = Borrowed_PyMapping_GetItemString(obj, "metadata");
 
     if (metadata == NULL) {
         PyErr_Clear();

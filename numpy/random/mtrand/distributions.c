@@ -188,7 +188,7 @@ double rk_beta(rk_state *state, double a, double b)
     if ((a <= 1.0) && (b <= 1.0))
     {
         double U, V, X, Y;
-        /* Use Jonk's algorithm */
+        /* Use Johnk's algorithm */
 
         while (1)
         {
@@ -231,6 +231,9 @@ double rk_chisquare(rk_state *state, double df)
 
 double rk_noncentral_chisquare(rk_state *state, double df, double nonc)
 {
+    if (nonc == 0){
+        return rk_chisquare(state, df);
+    }
     if(1 < df)
     {
         const double Chi2 = rk_chisquare(state, df - 1);

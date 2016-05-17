@@ -15,7 +15,14 @@ from numpy.testing import (
 
 
 try:
-    cdll = np.ctypeslib.load_library('multiarray', np.core.multiarray.__file__)
+    cdll = None
+    if hasattr(sys, 'gettotalrefcount'):
+        try:
+            cdll = np.ctypeslib.load_library('multiarray_d', np.core.multiarray.__file__)
+        except OSError:
+            pass
+    if cdll is None:
+        cdll = np.ctypeslib.load_library('multiarray', np.core.multiarray.__file__)
     _HAS_CTYPE = True
 except ImportError:
     _HAS_CTYPE = False
@@ -52,38 +59,38 @@ class TestIndexing(TestCase):
         a = np.array([[5]])
 
         # start as float.
-        assert_raises(IndexError, lambda: a[0.0:])
-        assert_raises(IndexError, lambda: a[0:, 0.0:2])
-        assert_raises(IndexError, lambda: a[0.0::2, :0])
-        assert_raises(IndexError, lambda: a[0.0:1:2,:])
-        assert_raises(IndexError, lambda: a[:, 0.0:])
+        assert_raises(TypeError, lambda: a[0.0:])
+        assert_raises(TypeError, lambda: a[0:, 0.0:2])
+        assert_raises(TypeError, lambda: a[0.0::2, :0])
+        assert_raises(TypeError, lambda: a[0.0:1:2,:])
+        assert_raises(TypeError, lambda: a[:, 0.0:])
         # stop as float.
-        assert_raises(IndexError, lambda: a[:0.0])
-        assert_raises(IndexError, lambda: a[:0, 1:2.0])
-        assert_raises(IndexError, lambda: a[:0.0:2, :0])
-        assert_raises(IndexError, lambda: a[:0.0,:])
-        assert_raises(IndexError, lambda: a[:, 0:4.0:2])
+        assert_raises(TypeError, lambda: a[:0.0])
+        assert_raises(TypeError, lambda: a[:0, 1:2.0])
+        assert_raises(TypeError, lambda: a[:0.0:2, :0])
+        assert_raises(TypeError, lambda: a[:0.0,:])
+        assert_raises(TypeError, lambda: a[:, 0:4.0:2])
         # step as float.
-        assert_raises(IndexError, lambda: a[::1.0])
-        assert_raises(IndexError, lambda: a[0:, :2:2.0])
-        assert_raises(IndexError, lambda: a[1::4.0, :0])
-        assert_raises(IndexError, lambda: a[::5.0,:])
-        assert_raises(IndexError, lambda: a[:, 0:4:2.0])
+        assert_raises(TypeError, lambda: a[::1.0])
+        assert_raises(TypeError, lambda: a[0:, :2:2.0])
+        assert_raises(TypeError, lambda: a[1::4.0, :0])
+        assert_raises(TypeError, lambda: a[::5.0,:])
+        assert_raises(TypeError, lambda: a[:, 0:4:2.0])
         # mixed.
-        assert_raises(IndexError, lambda: a[1.0:2:2.0])
-        assert_raises(IndexError, lambda: a[1.0::2.0])
-        assert_raises(IndexError, lambda: a[0:, :2.0:2.0])
-        assert_raises(IndexError, lambda: a[1.0:1:4.0, :0])
-        assert_raises(IndexError, lambda: a[1.0:5.0:5.0,:])
-        assert_raises(IndexError, lambda: a[:, 0.4:4.0:2.0])
+        assert_raises(TypeError, lambda: a[1.0:2:2.0])
+        assert_raises(TypeError, lambda: a[1.0::2.0])
+        assert_raises(TypeError, lambda: a[0:, :2.0:2.0])
+        assert_raises(TypeError, lambda: a[1.0:1:4.0, :0])
+        assert_raises(TypeError, lambda: a[1.0:5.0:5.0,:])
+        assert_raises(TypeError, lambda: a[:, 0.4:4.0:2.0])
         # should still get the DeprecationWarning if step = 0.
-        assert_raises(IndexError, lambda: a[::0.0])
+        assert_raises(TypeError, lambda: a[::0.0])
 
     def test_index_no_array_to_index(self):
         # No non-scalar arrays.
         a = np.array([[[1]]])
 
-        assert_raises(IndexError, lambda: a[a:a:a])
+        assert_raises(TypeError, lambda: a[a:a:a])
 
     def test_none_index(self):
         # `None` index adds newaxis
@@ -895,10 +902,7 @@ class TestMultiIndexingAutomated(TestCase):
                                     + arr.shape[ax + len(indx[1:]):]))
 
                 # Check if broadcasting works
-                if len(indx[1:]) != 1:
-                    res = np.broadcast(*indx[1:])  # raises ValueError...
-                else:
-                    res = indx[1]
+                res = np.broadcast(*indx[1:])
                 # unfortunately the indices might be out of bounds. So check
                 # that first, and use mode='wrap' then. However only if
                 # there are any indices...
@@ -1137,7 +1141,6 @@ class TestBooleanArgumentErrors(TestCase):
         # array is thus also deprecated, but not with the same message:
         assert_raises(TypeError, operator.index, np.array(True))
         assert_raises(TypeError, np.take, args=(a, [0], False))
-        assert_raises(IndexError, lambda: a[False:True:True])
         assert_raises(IndexError, lambda: a[False, 0])
         assert_raises(IndexError, lambda: a[False, 0, 0])
 

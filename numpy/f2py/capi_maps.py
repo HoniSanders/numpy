@@ -211,7 +211,7 @@ if os.path.isfile('.f2py_f2cmap'):
                 else:
                     errmess("\tIgnoring map {'%s':{'%s':'%s'}}: '%s' must be in %s\n" % (
                         k, k1, d[k][k1], d[k][k1], list(c2py_map.keys())))
-        outmess('Succesfully applied user defined changes from .f2py_f2cmap\n')
+        outmess('Successfully applied user defined changes from .f2py_f2cmap\n')
     except Exception as msg:
         errmess(
             'Failed to apply user defined changes from .f2py_f2cmap: %s. Skipping.\n' % (msg))
@@ -519,8 +519,7 @@ def sign2map(a, var):
             if k[:4] == 'out=':
                 out_a = k[4:]
                 break
-    ret = {'varname': a, 'outvarname': out_a}
-    ret['ctype'] = getctype(var)
+    ret = {'varname': a, 'outvarname': out_a, 'ctype': getctype(var)}
     intent_flags = []
     for f, s in isintent_dict.items():
         if f(var):
@@ -823,8 +822,7 @@ void
 
 
 def common_sign2map(a, var):  # obsolute
-    ret = {'varname': a}
-    ret['ctype'] = getctype(var)
+    ret = {'varname': a, 'ctype': getctype(var)}
     if isstringarray(var):
         ret['ctype'] = 'char'
     if ret['ctype'] in c2capi_map:

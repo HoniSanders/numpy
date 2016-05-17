@@ -408,6 +408,10 @@ class TestMetadata(TestCase):
         d = np.dtype([('a', np.dtype(int, metadata={'datum': 1}))])
         self.assertEqual(d['a'].metadata, {'datum': 1})
 
+    def base_metadata_copied(self):
+        d = np.dtype((np.void, np.dtype('i4,i4', metadata={'datum': 1})))
+        assert_equal(d.metadata, {'datum': 1})
+
 class TestString(TestCase):
     def test_complex_dtype_str(self):
         dt = np.dtype([('top', [('tiles', ('>f4', (64, 64)), (1,)),
@@ -585,6 +589,10 @@ def test_rational_dtype():
     # test for bug gh-5719
     a = np.array([1111], dtype=rational).astype
     assert_raises(OverflowError, a, 'int8')
+
+    # test that dtype detection finds user-defined types
+    x = rational(1)
+    assert_equal(np.array([x,x]).dtype, np.dtype(rational))
 
 
 if __name__ == "__main__":
