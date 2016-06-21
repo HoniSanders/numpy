@@ -1111,8 +1111,9 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
         lagstep = 1;
     }
 
-    n1 = PyArray_DIMS(ap1)[0];      /* size of x */
-    n2 = PyArray_DIMS(ap2)[0];      /* size of y */
+    /* size of x (n1) and y (n2) */
+    n1 = PyArray_DIMS(ap1)[0];
+    n2 = PyArray_DIMS(ap2)[0];
     if (n1 < n2) {
         ret = ap1;
         ap1 = ap2;
@@ -1190,12 +1191,14 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     }
 
     NPY_BEGIN_THREADS_DESCR(PyArray_DESCR(ret));
-    ip1 = PyArray_DATA(ap1);            /* x[0]             */
-    is1 = PyArray_STRIDES(ap1)[0];      /* x strides        */
-    ip2 = PyArray_DATA(ap2);            /* y[0]             */
-    is2 = PyArray_STRIDES(ap2)[0];      /* y strides        */
-    op = PyArray_DATA(ret);             /* answer data      */
-    os = PyArray_DESCR(ret)->elsize;    /* answer strides   */
+    /* p is pointer to array start and s is stride */
+    /* i1 is x, i2, is y, o is answer */
+    ip1 = PyArray_DATA(ap1);
+    is1 = PyArray_STRIDES(ap1)[0];
+    ip2 = PyArray_DATA(ap2);
+    is2 = PyArray_STRIDES(ap2)[0];
+    op = PyArray_DATA(ret);
+    os = PyArray_DESCR(ret)->elsize;
 
     lag = minlag;
     if (lag < -n2+1) {
@@ -1208,14 +1211,19 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     maxleft = (0 < maxlag ? 0 : maxlag);
     tmplag = lag;
     for (lag = tmplag; lag < maxleft; lag+=lagstep) {
-        /* for lags where y is left of x */
-        n = n2 + lag;   /* overlap is length of y - lag */
+        /* for lags where y is left of x,
+         * overlap is length of y - lag
+         */
+        n = n2 + lag;
         dot(ip1, is1, ip2 - lag*is2, is2, op, n, ret);
-        op += os;       /* iterate over answer vector   */
+        /* iterate over answer vector */
+        op += os;
     }
     if (maxlag < n1 - n2) {
-        /* if maxlag doesn't take y all the way to the end of x */
-        n11 = maxlag + n2;      /* relevant length of x is smaller */
+        /* if maxlag doesn't take y all the way to the end of x,
+         * relevant length of x is smaller
+         */
+        n11 = maxlag + n2;
     }
     else {
         n11 = n1;
@@ -1308,11 +1316,13 @@ _pyarray_revert(PyArrayObject *ret)
 /*NUMPY_API
  * correlate(a1,a2,mode,minlag,maxlag,lagstep)
  *
- * This function correlates a1 with a2.  mode=0,1,2 retains functionality of PyArray_Correlate2
+ * This function correlates a1 with a2.
+ * mode=0,1,2 retains functionality of PyArray_Correlate2.
  * mode=3 allows for specification of minlag, maxlag, and lagstep.
  */
 NPY_NO_EXPORT PyObject *
-PyArray_CorrelateLags(PyObject *op1, PyObject *op2, int mode, npy_intp minlag, npy_intp maxlag, npy_intp lagstep)
+PyArray_CorrelateLags(PyObject *op1, PyObject *op2, int mode,
+                      npy_intp minlag, npy_intp maxlag, npy_intp lagstep)
 {
     PyArrayObject *ap1, *ap2, *ret = NULL;
     int typenum;
@@ -1347,14 +1357,15 @@ PyArray_CorrelateLags(PyObject *op1, PyObject *op2, int mode, npy_intp minlag, n
         ap2 = cap2;
     }
 
-    ret = _pyarray_correlate(ap1, ap2, typenum, mode, &inverted, minlag, maxlag, lagstep);
+    ret = _pyarray_correlate(ap1, ap2, typenum, mode, &inverted,
+                             minlag, maxlag, lagstep);
     if (ret == NULL) {
         goto clean_ap2;
     }
 
     /*
-     * If we inverted input orders, we need to reverse the output array (i.e.
-     * ret = ret[::-1])
+     * If we inverted input orders, we need to reverse the output array
+     * (i.e. ret = ret[::-1])
      */
     if (inverted) {
         st = _pyarray_revert(ret);
@@ -1387,7 +1398,9 @@ PyArray_Correlate2(PyObject *op1, PyObject *op2, int mode)
 {
     npy_intp z = 0;
     /* For modes other than 3 (which was not a mode before maxlags were added),
-    minlag, maxlag, and lagstep (the last three arguments) will be ignored */
+     * minlag, maxlag, and lagstep (the last three args of _pyarray_correlate)
+     * will be ignored
+     */
     return PyArray_CorrelateLags(op1, op2, mode, z, z, z);
 }
 
@@ -1404,7 +1417,9 @@ PyArray_Correlate(PyObject *op1, PyObject *op2, int mode)
 
     npy_intp z = 0;
     /* For modes other than 3 (which was not a mode before maxlags were added),
-    minlag, maxlag, and lagstep (the last three arguments of _pyarray_correlate) will be ignored */
+     * minlag, maxlag, and lagstep (the last three args of _pyarray_correlate)
+     * will be ignored
+     */
 
     typenum = PyArray_ObjectType(op1, 0);
     typenum = PyArray_ObjectType(op2, typenum);
@@ -2914,7 +2929,8 @@ array_correlate2(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
     PyObject *shape, *a0;
     int mode = 0;
     npy_intp maxlag = 0, minlag = 0, lagstep = 0;
-    static char *kwlist[] = {"a", "v", "mode", "minlag", "maxlag", "lagstep", NULL};
+    static char *kwlist[] = {"a", "v", "mode", "minlag", "maxlag", "lagstep",
+                             NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO|innn", kwlist,
                 &a0, &shape, &mode, &minlag, &maxlag, &lagstep)) {
