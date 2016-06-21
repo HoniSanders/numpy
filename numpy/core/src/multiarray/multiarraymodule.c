@@ -2982,11 +2982,25 @@ array_fastCopyAndTranspose(PyObject *NPY_UNUSED(dummy), PyObject *args)
 }
 
 static PyObject *
-array_correlate2(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
+array_correlate(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
 {
     PyObject *shape, *a0;
     int mode = 0;
-    npy_intp maxlag = 0, minlag = 0, lagstep = 0;
+    static char *kwlist[] = {"a", "v", "mode", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO|i", kwlist,
+                &a0, &shape, &mode)) {
+        return NULL;
+    }
+    return PyArray_Correlate(a0, shape, mode);
+}
+
+static PyObject *
+array_correlate2(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
+{
+    PyObject *shape, *a0;
+    int mode = -1;
+    npy_intp minlag = 0, maxlag = 0, lagstep = 0;
     static char *kwlist[] = {"a", "v", "mode", "minlag", "maxlag", "lagstep",
                              NULL};
 
@@ -4344,6 +4358,9 @@ static struct PyMethodDef array_module_methods[] = {
     {"_fastCopyAndTranspose",
         (PyCFunction)array_fastCopyAndTranspose,
         METH_VARARGS, NULL},
+    {"correlate",
+        (PyCFunction)array_correlate,
+        METH_VARARGS | METH_KEYWORDS, NULL},
     {"correlate2",
         (PyCFunction)array_correlate2,
         METH_VARARGS | METH_KEYWORDS, NULL},
