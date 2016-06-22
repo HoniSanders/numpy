@@ -1300,8 +1300,6 @@ _lags_from_mode(int mode, npy_intp n1, npy_intp n2,
     /* place holders for minlag, maxlag, and lagstep respectively */
     npy_intp m0, m1, s;
 
-
-
     if (n1 < n2) {
         i = n1;
         n1 = n2;
@@ -1422,15 +1420,18 @@ clean_ap1:
  *
  * This function computes the usual correlation (correlate(a1, a2) !=
  * correlate(a2, a1), and conjugate the second argument for complex inputs
+ *
+ * This function requires a mode.
  */
 NPY_NO_EXPORT PyObject *
 PyArray_Correlate2(PyObject *op1, PyObject *op2, int mode)
 {
-    PyArrayObject *ap1, *ap2;
+    PyArrayObject *ap1, *ap2, *ret = NULL;
     int typenum;
     PyArray_Descr *typec;
     npy_intp minlag, maxlag, lagstep;
     npy_intp n1, n2;
+    int inverted, st;
 
     typenum = PyArray_ObjectType(op1, 0);
     typenum = PyArray_ObjectType(op2, typenum);
@@ -1438,7 +1439,7 @@ PyArray_Correlate2(PyObject *op1, PyObject *op2, int mode)
     typec = PyArray_DescrFromType(typenum);
     Py_INCREF(typec);
     ap1 = (PyArrayObject *)PyArray_FromAny(op1, typec, 1, 1,
-                                            NPY_ARRAY_DEFAULT, NULL);
+                                           NPY_ARRAY_DEFAULT, NULL);
     if (ap1 == NULL) {
         Py_DECREF(typec);
         return NULL;
@@ -1446,18 +1447,50 @@ PyArray_Correlate2(PyObject *op1, PyObject *op2, int mode)
     ap2 = (PyArrayObject *)PyArray_FromAny(op2, typec, 1, 1,
                                            NPY_ARRAY_DEFAULT, NULL);
     if (ap2 == NULL) {
-        goto fail;
+        goto clean_ap1;
+    }
+
+    if (PyArray_ISCOMPLEX(ap2)) {
+        PyArrayObject *cap2;
+        cap2 = (PyArrayObject *)PyArray_Conjugate(ap2, NULL);
+        if (cap2 == NULL) {
+            goto clean_ap2;
+        }
+        Py_DECREF(ap2);
+        ap2 = cap2;
     }
 
     /* size of x (n1) and y (n2) */
     n1 = PyArray_DIMS(ap1)[0];
     n2 = PyArray_DIMS(ap2)[0];
     _lags_from_mode(mode, n1, n2, &minlag, &maxlag, &lagstep);
-    return PyArray_CorrelateLags(op1, op2, minlag, maxlag, lagstep);
+    ret = _pyarray_correlate(ap1, ap2, typenum, &inverted,
+                             minlag, maxlag, lagstep);
+    if (ret == NULL) {
+        goto clean_ap2;
+    }
 
-fail:
-    Py_XDECREF(ap1);
-    Py_XDECREF(ap2);
+    /*
+     * If we inverted input orders, we need to reverse the output array
+     * (i.e. ret = ret[::-1])
+     */
+    if (inverted) {
+        st = _pyarray_revert(ret);
+        if(st) {
+            goto clean_ret;
+        }
+    }
+
+    Py_DECREF(ap1);
+    Py_DECREF(ap2);
+    return (PyObject *)ret;
+
+clean_ret:
+    Py_DECREF(ret);
+clean_ap2:
+    Py_DECREF(ap2);
+clean_ap1:
+    Py_DECREF(ap1);
     return NULL;
 }
 
@@ -3019,46 +3052,7 @@ array_correlate2(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
         }
     }
     if (mode != 3) {
-        PyArrayObject *ap1, *ap2;
-        int typenum;
-        PyArray_Descr *typec;
-        npy_intp n1, n2;
-        npy_intp m0, m1, s;
-
-        typenum = PyArray_ObjectType(a0, 0);
-        typenum = PyArray_ObjectType(shape, typenum);
-
-        typec = PyArray_DescrFromType(typenum);
-        Py_INCREF(typec);
-        ap1 = (PyArrayObject *)PyArray_FromAny(a0, typec, 1, 1,
-                                                NPY_ARRAY_DEFAULT, NULL);
-        if (ap1 == NULL) {
-            Py_DECREF(typec);
-            return NULL;
-        }
-        ap2 = (PyArrayObject *)PyArray_FromAny(shape, typec, 1, 1,
-                                               NPY_ARRAY_DEFAULT, NULL);
-        if (ap2 == NULL) {
-            Py_XDECREF(ap1);
-            Py_XDECREF(ap2);
-            return NULL;
-        }
-        /* size of x (n1) and y (n2) */
-        n1 = PyArray_DIMS(ap1)[0];
-        n2 = PyArray_DIMS(ap2)[0];
-        _lags_from_mode(mode, n1, n2, &m0, &m1, &s);
-        if (minlag != 0) {
-            assert(m0 == minlag);
-        }
-        if (maxlag != 0) {
-            assert(m1 == maxlag);
-        }
-        if (lagstep != 0) {
-            assert(s == lagstep);
-        }
-        minlag = m0;
-        maxlag = m1;
-        lagstep = s;
+        return PyArray_Correlate2(a0, shape, mode);
     }
     return PyArray_CorrelateLags(a0, shape, minlag, maxlag, lagstep);
 }

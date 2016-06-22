@@ -843,7 +843,6 @@ def _lags_from_mode(alen, vlen, mode, lags=()):
         alen, vlen = vlen, alen
         inverted = 1
 
-    mode = _mode_from_name(mode)
     if mode is 0:
         mode_lags = (0, alen-vlen+1, 1)
     elif mode is 1:
@@ -862,7 +861,7 @@ def _lags_from_mode(alen, vlen, mode, lags=()):
         lags = _lags_from_lags(lags)
         assert lags == mode_lags, \
                'Custom lags should be passed to correlate() with mode="lags".'
-    return mode, mode_lags
+    return mode_lags
 
 def correlate(a, v, mode='default', lags=(), returns_lagvector=False):
     """
@@ -944,16 +943,16 @@ def correlate(a, v, mode='default', lags=(), returns_lagvector=False):
     array([ 0.0+0.j ,  3.0+1.j ,  1.5+1.5j,  1.0+0.j ,  0.5+0.5j])
 
     """
-    if len(a) == 0:
-        raise ValueError('a cannot be empty')
-    if len(v) == 0:
-        raise ValueError('v cannot be empty')
     if mode == 'default':
         if lags:
             mode = 'lags'
         else:
             mode = 'valid'
-    mode, lags = _lags_from_mode(len(a), len(v), mode, lags)
+    mode = _mode_from_name(mode)
+    if mode in (0, 1, 2) and not returns_lagvector:
+        return multiarray.correlate2(a, v, mode)
+
+    lags = _lags_from_mode(len(a), len(v), mode, lags)
     if returns_lagvector:
         return multiarray.correlate2(a, v, 3, lags[0], lags[1], lags[2]), \
                                      arange(lags[0], lags[1], lags[2])
@@ -1101,18 +1100,22 @@ def convolve(a, v, mode='full', lags=(), returns_lagvector=False):
 
     """
     a, v = array(a, copy=False, ndmin=1), array(v, copy=False, ndmin=1)
-    if (len(v) > len(a)):
-        a, v = v, a
     if len(a) == 0:
         raise ValueError('a cannot be empty')
     if len(v) == 0:
         raise ValueError('v cannot be empty')
+    if (len(v) > len(a)):
+        a, v = v, a
     if mode == 'default':
         if lags:
             mode = 'lags'
         else:
             mode = 'full'
-    mode, lags = _lags_from_mode(len(a), len(v), mode, lags)
+    mode = _mode_from_name(mode)
+    if mode in (0, 1, 2) and not returns_lagvector:
+        return multiarray.correlate2(a, v[::-1], mode)
+
+    lags = _lags_from_mode(len(a), len(v), mode, lags)
     if returns_lagvector:
         return multiarray.correlate2(a, v[::-1], 3, lags[0], lags[1], lags[2]),\
                                      arange(lags[0], lags[1], lags[2])
