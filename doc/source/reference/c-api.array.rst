@@ -2161,6 +2161,32 @@ Array Functions
 
       z[k] = sum_n op1[n] * conj(op2[n+k])
 
+.. c:function:: PyObject* PyArray_CorrelateLags(PyObject* op1, PyObject* op2, npy_intp minlag, npy_intp maxlag, npy_intp lagstep)
+
+    Updated version of PyArray_Correlate2, which allows for custom lags in calculation.
+    The correlation is computed at each output point by multiplying *op1* by
+    a shifted version of *op2* and summing the result.
+    As a result of the shift, needed values outside of the defined range of
+    *op1* and *op2* are interpreted as zero.
+
+    This version differs from the other PyArray_Correlate* functions in that
+    PyArray_CorrelateLags calculates the correlation for lags starting at minlag
+    and ending at (maxlag - 1), with steps of size lagstep.
+    The lags for which the correlation will be calculated correspond with the values in
+    the vector formed by numpy.arange((minlag, maxlag, lagstep)).
+
+    .. rubric:: Notes
+
+    The following lag values should be used to reproduce the mode parameter used by
+    PyArray_Correlate2 (n1 and n2 are the vector lengths):
+       mode     |   minlag   |   maxlag   |   lagstep
+    0 ("valid") |     0      |  n1-n2+1   |      1
+     1 ("same") |   -n2/2    |  n1-n2/2   |      1
+     2 ("full") |   -n2+1    |     n1     |      1
+
+    PyArray_CorrelateLags uses the same definition of correlation as PyArray_Correlate2
+    in that the conjugate is taken and the argument order matters.
+
 .. c:function:: PyObject* PyArray_Where(PyObject* condition, PyObject* x, PyObject* y)
 
     If both ``x`` and ``y`` are ``NULL``, then return
