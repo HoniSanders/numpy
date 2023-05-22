@@ -3294,25 +3294,51 @@ array_correlate(PyObject *NPY_UNUSED(dummy),
             NULL, NULL, NULL) < 0) {
         return NULL;
     }
+    if (mode == 3) {
+        PyErr_SetString(PyExc_ValueError,
+                        "correlate() accepts only modes 0, 1, and 2 "
+                        "(valid, same and full). "
+                        "Use correlate2() for mode 3 (lags).");
+        return NULL;
+    }
     return PyArray_Correlate(a0, shape, mode);
 }
 
-static PyObject*
+static PyObject *
 array_correlate2(PyObject *NPY_UNUSED(dummy),
         PyObject *const *args, Py_ssize_t len_args, PyObject *kwnames)
 {
     PyObject *shape, *a0;
-    int mode = 0;
+    int mode = -1;
+    npy_intp minlag = 0, maxlag = 0, lagstep = 0;
+    static char *kwlist[] = {"a", "v", "mode", "minlag", "maxlag", "lagstep",
+                             NULL};
     NPY_PREPARE_ARGPARSER;
 
     if (npy_parse_arguments("correlate2", args, len_args, kwnames,
             "a", NULL, &a0,
             "v", NULL, &shape,
             "|mode", &PyArray_CorrelatemodeConverter, &mode,
+            "|minlag", NULL, &minlag,
+            "|maxlag", NULL, &maxlag,
+            "|lagstep", NULL, &lagstep,
             NULL, NULL, NULL) < 0) {
         return NULL;
     }
-    return PyArray_Correlate2(a0, shape, mode);
+    if (mode == -1) {
+        if (minlag == 0 && maxlag == 0 && lagstep == 0) {
+            /* if no lag parameters passed, use default: mode = 'valid' */
+            mode = 0;
+        }
+        else {
+            /* if lag parameters were passed, use them */
+            mode = 3;
+        }
+    }
+    if (mode != 3) {
+        return PyArray_Correlate2(a0, shape, mode);
+    }
+    return PyArray_CorrelateLags(a0, shape, minlag, maxlag, lagstep);
 }
 
 static PyObject *
