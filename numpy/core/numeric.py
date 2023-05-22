@@ -696,16 +696,16 @@ def _lags_from_mode(alen, vlen, mode):
         alen, vlen = vlen, alen
         inverted = 1
 
-    if mode is 0:
+    if mode == 0:
         mode_lags = (0, alen-vlen+1, 1)
-    elif mode is 1:
+    elif mode == 1:
         mode_lags = (-int(vlen/2), alen - int(vlen/2), 1)
-    elif mode is 2:
+    elif mode == 2:
         mode_lags = (-vlen+1, alen, 1)
     else:
         raise ValueError("correlate/convolve mode argument must be unused or" +
                          " one of {'valid', 'same', 'full', 'lags'}")
-    
+
     if inverted:
         mode_lags = (-int(ceil((mode_lags[1]-mode_lags[0])/float(mode_lags[2])))
                      *mode_lags[2]-mode_lags[0]+mode_lags[2],
@@ -814,7 +814,7 @@ def correlate(a, v, mode='default', lags=(), returns_lagvector=False):
     if mode in (0, 1, 2):
         if lags:
             raise ValueError("correlate mode keyword argument must be 'lags'" +
-                            " or unused if the lags keyword argument is used.")
+                             " or unused if the lags keyword argument is used.")
         result = multiarray.correlate2(a, v, mode)
         if returns_lagvector:
             alen, vlen = len(a), len(v)
@@ -876,10 +876,10 @@ def convolve(a, v, mode='full', lags=(), returns_lagvector=False):
         'lags':
           Mode 'lags' uses the lags argument to define the lags for which
           to perform the convolution.
-        
+
         lags : int or int tuple, optional
           Mode should be unset or set to 'lags' to use the lags argument.
-        
+
         int (maxlag):
           This calculates the convolution for all lags starting at
           (-maxlag + 1) and ending at (maxlag - 1), with steps of size 1.
