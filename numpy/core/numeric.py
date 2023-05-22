@@ -663,29 +663,32 @@ for key in keys:
     _mode_from_name_dict[key.upper()] = _mode_from_name_dict[key]
 _mode_from_name_dict_values = _mode_from_name_dict.values()
 
-def _mode_from_name(mode):
-     # guarantees that output is a value in _mode_from_name_dict
-     if mode in _mode_from_name_dict_values:
-         return mode
-     try:
-         mode = _mode_from_name_dict[mode[0]]
-     except KeyError:
-         raise ValueError("correlate/convolve mode argument must be unused or" +
-                          " one of {'valid', 'same', 'full', 'lags'}")
-     return mode
 
-def _lags_from_lags(l):
-    if type(l) is int:          # maxlag
-        lags = (-l+1, l, 1)
-    elif type(l) is tuple:      # minlag and maxlag
-        if len(l) > 2:
-            lags = (int(l[0]), int(l[1]), int(l[2]))
+def _mode_from_name(mode):
+    # guarantees that output is a value in _mode_from_name_dict
+    if mode in _mode_from_name_dict_values:
+        return mode
+    try:
+        mode = _mode_from_name_dict[mode[0]]
+    except KeyError:
+        raise ValueError("correlate/convolve mode argument must be unused or" +
+                         " one of {'valid', 'same', 'full', 'lags'}")
+    return mode
+
+
+def _lags_from_lags(lag):
+    if type(lag) is int:          # maxlag
+        lags = (-lag+1, lag, 1)
+    elif type(lag) is tuple:      # minlag and maxlag
+        if len(lag) > 2:
+            lags = (int(lag[0]), int(lag[1]), int(lag[2]))
         else:
-            lags = (int(l[0]), int(l[1]), 1)
+            lags = (int(lag[0]), int(lag[1]), 1)
     else:
         raise ValueError("correlate/convolve lags argument must be " +
                          "int or int tuple.")
     return lags
+
 
 def _lags_from_mode(alen, vlen, mode):
     inverted = 0
