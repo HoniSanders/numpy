@@ -877,8 +877,8 @@ def convolve(a, v, mode='full', lags=(), returns_lagvector=False):
           Mode 'lags' uses the lags argument to define the lags for which
           to perform the convolution.
 
-        lags : int or int tuple, optional
-          Mode should be unset or set to 'lags' to use the lags argument.
+    lags : int or int tuple, optional
+        Mode should be unset or set to 'lags' to use the lags argument.
 
         int (maxlag):
           This calculates the convolution for all lags starting at
