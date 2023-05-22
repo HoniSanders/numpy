@@ -989,8 +989,8 @@ def convolve(a, v, mode='full', lags=(), returns_lagvector=False):
     mode = _mode_from_name(mode)  # guaranteed a value in _mode_from_name_dict
     if mode in (0, 1, 2):
         if lags:
-            raise ValueError("convolve mode keyword argument must be 'lags'" +
-                             " or unused if the lags keyword argument is used.")
+            raise ValueError("convolve mode keyword argument must be 'lags' " +
+                             "or unused if the lags keyword argument is used.")
         result = multiarray.correlate2(a, v[::-1], mode)
         if returns_lagvector:
             lags = _lags_from_mode(alen, vlen, mode)
