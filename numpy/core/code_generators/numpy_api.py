@@ -424,6 +424,8 @@ ufunc_funcs_api = {
     # End 1.8 API
     'PyUFunc_FromFuncAndDataAndSignatureAndIdentity': (42, MinVersion("1.16")),
     # End 1.16 API
+    'PyArray_CorrelateLags':    (43,),
+    # End 1.17 API
 }
 
 # List of all the dicts which define the C API
