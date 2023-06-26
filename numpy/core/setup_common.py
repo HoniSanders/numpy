@@ -49,7 +49,8 @@ C_ABI_VERSION = 0x01000009
 # 0x00000010 - 1.23.x
 # 0x00000010 - 1.24.x
 # 0x00000011 - 1.25.x
-C_API_VERSION = 0x00000011
+# 0x00000012 - 1.26.x
+C_API_VERSION = 0x00000012
 
 # By default, when compiling downstream libraries against NumPy,```
 # pick an older feature version.  For example, for 1.25.x we default to the
