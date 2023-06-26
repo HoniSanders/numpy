@@ -714,7 +714,7 @@ def _lags_from_mode(alen, vlen, mode):
     return mode_lags
 
 
-def _correlate_dispatcher(a, v, mode=None):
+def _correlate_dispatcher(a, v, mode=None, lags=None, returns_lagvector=None):
     return (a, v)
 
 
@@ -829,7 +829,7 @@ def correlate(a, v, mode='default', lags=(), returns_lagvector=False):
         return result
 
 
-def _convolve_dispatcher(a, v, mode=None):
+def _convolve_dispatcher(a, v, mode=None, lags=None, returns_lagvector=False):
     return (a, v)
 
 
