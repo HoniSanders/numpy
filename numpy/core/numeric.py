@@ -719,7 +719,7 @@ def _correlate_dispatcher(a, v, mode=None, lags=None, returns_lagvector=None):
 
 
 @array_function_dispatch(_correlate_dispatcher)
-def correlate(a, v, mode='default', lags=(), returns_lagvector=False):
+def correlate(a, v, mode='default', lags=None, returns_lagvector=False):
     r"""
     Cross-correlation of two 1-dimensional sequences.
 
@@ -834,7 +834,7 @@ def _convolve_dispatcher(a, v, mode=None, lags=None, returns_lagvector=False):
 
 
 @array_function_dispatch(_convolve_dispatcher)
-def convolve(a, v, mode='full', lags=(), returns_lagvector=False):
+def convolve(a, v, mode='full', lags=None, returns_lagvector=False):
     """
     Returns the discrete, linear convolution of two one-dimensional sequences.
 
