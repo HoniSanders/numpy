@@ -735,13 +735,44 @@ def _mode_from_name(mode):
                      "one of 'valid', 'same', 'full'")
 
 
-def _lags_from_lags(lags):
-    if not isinstance(lags, (int, nt.integer)):
-        raise TypeError("lags must be an integer")
-    m = int(lags)
-    if m < 0:
-        raise ValueError("lags must be non-negative")
-    return (-m, m + 1, 1)
+def _lags_from_lags(lag):
+    """Convert a lags specification to (min_lag, max_lag_exclusive, lag_step)
+    or a 1-D integer ndarray of arbitrary lag indices.
+
+    Accepts an ``int`` (symmetric window ``[-n, n]``), a ``range``, a
+    ``slice`` with explicit start/stop, or a 1-D integer array_like.
+    Arrays that form an arithmetic progression return a tuple for a single
+    C call; non-arithmetic arrays return the raw ndarray for the caller to
+    loop over.
+    """
+    if isinstance(lag, (int, nt.integer)):
+        m = int(lag)
+        if m < 0:
+            raise ValueError("lags integer must be non-negative")
+        return (-m, m + 1, 1)
+    if isinstance(lag, range):
+        return (lag.start, lag.stop, lag.step)
+    if isinstance(lag, slice):
+        if lag.start is None or lag.stop is None:
+            raise ValueError("lags slice must have explicit start and stop")
+        step = 1 if lag.step is None else int(lag.step)
+        if step == 0:
+            raise ValueError("lag_step must not be zero")
+        return (int(lag.start), int(lag.stop), step)
+
+    arr = asanyarray(lag)
+    if arr.ndim != 1 or arr.size == 0:
+        raise ValueError("lags must be a 1-D non-empty sequence")
+    if not nt.issubdtype(arr.dtype, nt.integer):
+        raise TypeError("lags values must be integers")
+    if arr.size == 1:
+        return (int(arr[0]), int(arr[0]) + 1, 1)
+    step = int(arr[1] - arr[0])
+    if step != 0:
+        expected = arr[0] + step * arange(arr.size)
+        if (arr == expected).all():
+            return (int(arr[0]), int(arr[-1]) + step, step)
+    return arr  # arbitrary indices — caller loops
 
 
 def _lags_from_mode(alen, vlen, mode):
@@ -802,9 +833,12 @@ def correlate(a, v, mode=None, *, lags=None):
         range.  Passing an explicit mode together with ``lags`` raises an
         error.  Note that the default is ``'valid'``, unlike `convolve`,
         which uses ``'full'``.
-    lags : int, optional
-        Lag window half-width.  An integer ``n`` requests the symmetric
-        inclusive window ``[-n, n]`` (``2*n+1`` lags total).
+    lags : int, range, slice, or 1-D array_like of int, optional
+        Lag specification.  An ``int`` ``n`` requests the symmetric inclusive
+        window ``[-n, n]`` (``2*n+1`` lags total).  Also accepts a Python
+        ``range``, a ``slice`` with explicit start and stop, or an arbitrary
+        1-D array_like of integer lag indices (arithmetic progressions use a
+        single fast C call; other arrays loop in Python).
 
     Returns
     -------
@@ -843,6 +877,8 @@ def correlate(a, v, mode=None, *, lags=None):
     array([ 2. ,  3.5,  3. ])
     >>> np.correlate([1, 2, 3], [0, 1, 0.5], lags=1)
     array([ 2. ,  3.5,  3. ])
+    >>> np.correlate([1, 2, 3], [0, 1, 0.5], lags=range(-1, 2, 2))
+    array([ 2.,  3.])
 
     Using complex sequences:
 
@@ -861,8 +897,14 @@ def correlate(a, v, mode=None, *, lags=None):
         if mode is not None:
             raise ValueError(
                 "lags cannot be used with an explicit mode")
-        lo, hi, step = _lags_from_lags(lags)
-        return multiarray.correlatelags(a, v, lo, hi, step)
+        lags_spec = _lags_from_lags(lags)
+        if isinstance(lags_spec, tuple):
+            return multiarray.correlatelags(
+                a, v, lags_spec[0], lags_spec[1], lags_spec[2])
+        return concatenate([
+            multiarray.correlatelags(a, v, int(lag), int(lag) + 1, 1)
+            for lag in lags_spec
+        ])
 
     return multiarray.correlate2(
         a, v, _mode_from_name(mode if mode is not None else 'valid'))
@@ -916,9 +958,12 @@ def convolve(a, v, mode=None, *, lags=None):
           outside the signal boundary have no effect. This corresponds with
           a lag tuple of (0, N-M+1, 1) for N>M or (-M+N, 1, 1) for M>N.
 
-    lags : int, optional
-        Lag window half-width.  An integer ``n`` requests the symmetric
-        inclusive window ``[-n, n]`` (``2*n+1`` lags total).
+    lags : int, range, slice, or 1-D array_like of int, optional
+        Lag specification.  An ``int`` ``n`` requests the symmetric inclusive
+        window ``[-n, n]`` (``2*n+1`` lags total).  Also accepts a Python
+        ``range``, a ``slice`` with explicit start and stop, or a 1-D
+        array_like of integer lag indices (arithmetic progressions use a
+        single fast C call; other arrays loop in Python).
 
     Returns
     -------
@@ -980,6 +1025,11 @@ def convolve(a, v, mode=None, *, lags=None):
     >>> np.convolve([1,2,3],[0,1,0.5], lags=1)
     array([ 1. ,  2.5,  4. ])
 
+    Find the convolution for lags ranging from -2 to 4 with steps of 2:
+
+    >>> np.convolve([1,2,3,4,5], [0,1,0.5], lags=range(-2, 6, 2))
+    array([ 0. ,  2.5,  5.5,  2.5])
+
     """
     a, v = array(a, copy=None, ndmin=1), array(v, copy=None, ndmin=1)
     alen, vlen = len(a), len(v)
@@ -995,9 +1045,16 @@ def convolve(a, v, mode=None, *, lags=None):
         if mode is not None:
             raise ValueError(
                 "lags cannot be used with an explicit mode")
-        lo, hi, step = _lags_from_lags(lags)
-        return multiarray.correlatelags(a, v[::-1], lo, hi, step,
-                                        conjugate=False)
+        lags_spec = _lags_from_lags(lags)
+        if isinstance(lags_spec, tuple):
+            return multiarray.correlatelags(
+                a, v[::-1], lags_spec[0], lags_spec[1], lags_spec[2],
+                conjugate=False)
+        return concatenate([
+            multiarray.correlatelags(
+                a, v[::-1], int(lag), int(lag) + 1, 1, conjugate=False)
+            for lag in lags_spec
+        ])
 
     return multiarray.correlate(
         a, v[::-1], _mode_from_name(mode if mode is not None else 'full'))
