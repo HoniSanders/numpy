@@ -1229,7 +1229,7 @@ def polyvander2d(x, y, deg):
     -------
     vander2d : ndarray
         The shape of the returned matrix is ``x.shape + (order,)``, where
-        :math:`order = (deg[0]+1)*(deg([1]+1)`.  The dtype will be the same
+        :math:`order = (deg[0]+1)*(deg[1]+1)`.  The dtype will be the same
         as the converted `x` and `y`.
 
     See Also
@@ -1309,7 +1309,7 @@ def polyvander3d(x, y, z, deg):
     -------
     vander3d : ndarray
         The shape of the returned matrix is ``x.shape + (order,)``, where
-        :math:`order = (deg[0]+1)*(deg([1]+1)*(deg[2]+1)`.  The dtype will
+        :math:`order = (deg[0]+1)*(deg[1]+1)*(deg[2]+1)`.  The dtype will
         be the same as the converted `x`, `y`, and `z`.
 
     See Also
@@ -1623,7 +1623,13 @@ class Polynomial(ABCPolyBase):
     ----------
     coef : array_like
         Polynomial coefficients in order of increasing degree, i.e.,
-        ``(1, 2, 3)`` give ``1 + 2*x + 3*x**2``.
+        ``(1, 2, 3)`` gives ``1 + 2*x + 3*x**2`` when `domain` and `window`
+        are equal, which is the default.
+        Otherwise, the coefficients are with respect to the variable obtained
+        by mapping ``x`` from `domain` to `window`. ``p.convert()`` returns
+        an equivalent series with the default `domain` and `window`, whose
+        coefficients are with respect to ``x``. Note that the conversion
+        generally loses precision.
     domain : (2,) array_like, optional
         Domain to use. The interval ``[domain[0], domain[1]]`` is mapped
         to the interval ``[window[0], window[1]]`` by shifting and scaling.

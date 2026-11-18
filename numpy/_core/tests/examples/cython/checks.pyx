@@ -279,9 +279,8 @@ def inc2_cfloat_struct(cnp.ndarray[cnp.cfloat_t] arr):
     arr[1].imag = arr[1].imag + 1
 
 
-def npystring_pack(arr):
+def npystring_pack(arr, size_t size=11):
     cdef char *string = "Hello world"
-    cdef size_t size = 11
 
     allocator = cnp.NpyString_acquire_allocator(
         <cnp.PyArray_StringDTypeObject *>cnp.PyArray_DESCR(arr)
@@ -292,6 +291,21 @@ def npystring_pack(arr):
         allocator, <cnp.npy_packed_static_string *>cnp.PyArray_DATA(arr), string, size,
     )
 
+    cnp.NpyString_release_allocator(allocator)
+    return ret
+
+
+def npystring_pack_invalid_utf8(arr, bytes data):
+    # NpyString_pack does not validate its input, so pack raw bytes into arr[0]
+    cdef const char *buf = data
+    cdef size_t size = len(data)
+
+    allocator = cnp.NpyString_acquire_allocator(
+        <cnp.PyArray_StringDTypeObject *>cnp.PyArray_DESCR(arr)
+    )
+    ret = cnp.NpyString_pack(
+        allocator, <cnp.npy_packed_static_string *>cnp.PyArray_DATA(arr), buf, size,
+    )
     cnp.NpyString_release_allocator(allocator)
     return ret
 

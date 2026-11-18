@@ -270,16 +270,23 @@ Array-protocol type strings (see :ref:`arrays.interface`)
    ``'L'``             unsigned long integer
    ``'q'``             (signed) long long integer
    ``'Q'``             unsigned long long integer
+   ``'n'``             signed :class:`intp`
+   ``'N'``             unsigned :class:`uintp`
+   ``'p'``             signed integer large enough for pointers
+   ``'P'``             unsigned integer large enough for pointers
+   ``'e'``             half precision
    ``'f'``             single precision
    ``'F'``             complex single precision
    ``'d'``             double precision
    ``'D'``             complex double precision
    ``'g'``             long precision
    ``'G'``             complex long double precision
-   ``'O'``             (Python) objects
    ``'S'``             zero-terminated bytes (not recommended)
    ``'U'``             Unicode string
    ``'V'``             raw data (:class:`void`)
+   ``'O'``             (Python) objects
+   ``'M'``             :class:`datetime64`
+   ``'m'``             :class:`timedelta64`
    ==================  ========================
 
    .. admonition:: Example
@@ -390,7 +397,7 @@ Type strings
    The first element, *field_name*, is the field name (if this is
    ``''`` then a standard field name, ``'f#'``, is assigned).  The
    field name may also be a 2-tuple of strings where the first string
-   is either a "title" (which may be any string or unicode string) or
+   is either a "title" (which may be any ``str``) or
    meta-data for the field which can be any object, and the second
    string is the "name" which must be a valid Python identifier.
 
@@ -479,7 +486,7 @@ Type strings
     This style allows passing in the :attr:`fields <dtype.fields>`
     attribute of a data-type object.
 
-    *obj* should contain string or unicode keys that refer to
+    *obj* should contain string keys that refer to
     ``(data-type, offset)`` or ``(data-type, offset, title)`` tuples.
 
     .. admonition:: Example

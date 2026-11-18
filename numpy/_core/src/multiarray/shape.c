@@ -14,6 +14,7 @@
 #include "ctors.h"
 #include "shape.h"
 #include "npy_static_data.h" /* for interned strings */
+#include "module_state.h"
 #include "templ_common.h" /* for npy_mul_sizes_with_overflow */
 #include "common.h" /* for convert_shape_to_string */
 #include "alloc.h"
@@ -30,12 +31,16 @@ NPY_NO_EXPORT int
 PyArray_Resize_int(PyArrayObject *self, PyArray_Dims *newshape, int refcheck)
 {
     npy_intp oldnbytes, newnbytes;
-    npy_intp oldsize, newsize;
-    int new_nd=newshape->len, k, elsize;
+    npy_intp oldsize, newsize, elsize;
+    int new_nd=newshape->len, k;
     npy_intp* new_dimensions=newshape->ptr;
     npy_intp new_strides[NPY_MAXDIMS];
     npy_intp *dimptr;
     char *new_data;
+
+    if (PyArray_FailUnlessWriteable(self, "resize") < 0) {
+        return -1;
+    }
 
     if (!PyArray_ISONESEGMENT(self)) {
         PyErr_SetString(PyExc_ValueError,
@@ -88,6 +93,12 @@ PyArray_Resize_int(PyArrayObject *self, PyArray_Dims *newshape, int refcheck)
             return -1;
         }
         if (refcheck) {
+#ifdef PYPY_VERSION
+            PyErr_SetString(PyExc_ValueError,
+                    "cannot resize an array with refcheck=True on PyPy.\n"
+                    "Use the np.resize function or refcheck=False");
+            return -1;
+#else
 #if PY_VERSION_HEX >= 0x030E00B0
             // Python 3.14 changed reference counting semantics for function-
             // local variables. There is no way to tell if the calling function
@@ -112,6 +123,7 @@ PyArray_Resize_int(PyArrayObject *self, PyArray_Dims *newshape, int refcheck)
                 PyErr_SetString(PyExc_ValueError, msg);
                 return -1;
             }
+#endif /* PYPY_VERSION */
         }
         /* Reallocate space if needed - allocating 0 is forbidden */
         PyObject *handler = PyArray_HANDLER(self);
@@ -140,7 +152,7 @@ PyArray_Resize_int(PyArrayObject *self, PyArray_Dims *newshape, int refcheck)
         }
         ((PyArrayObject_fields *)self)->data = new_data;
 
-        if (newnbytes > oldnbytes && PyArray_ISWRITEABLE(self)) {
+        if (newnbytes > oldnbytes) {
             /* Fill new memory with zeros (PyLong zero for object arrays) */
             npy_intp stride = elsize;
             npy_intp size = newsize - oldsize;
@@ -650,10 +662,11 @@ PyArray_SwapAxes(PyArrayObject *ap, int a1, int a2)
     int n = PyArray_NDIM(ap);
     int i;
 
-    if (check_and_adjust_axis_msg(&a1, n, npy_interned_str.axis1) < 0) {
+    npy_interned_str_struct *interned_str = &_npy_module_state->interned_str;
+    if (check_and_adjust_axis_msg(&a1, n, interned_str->axis1) < 0) {
         return NULL;
     }
-    if (check_and_adjust_axis_msg(&a2, n, npy_interned_str.axis2) < 0) {
+    if (check_and_adjust_axis_msg(&a2, n, interned_str->axis2) < 0) {
         return NULL;
     }
 
