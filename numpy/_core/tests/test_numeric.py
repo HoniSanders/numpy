@@ -3596,6 +3596,26 @@ class TestLikeFuncs:
             assert result.strides == (4, 1)
 
 
+def _lags_window_from_full(full, zero_index, lags):
+    """Reference for ``lags=``: slice of the 'full' output, zero-padded."""
+    out = []
+    for lag in range(-lags, lags + 1):
+        i = zero_index + lag
+        out.append(full[i] if 0 <= i < len(full) else 0)
+    return np.array(out, dtype=full.dtype)
+
+
+_LAGS_DTYPES = [np.bool, np.int8, np.uint8, np.int64, np.float32,
+                np.float64, np.complex128, object]
+
+
+def _lags_test_data(n, dtype, seed):
+    x = (np.arange(n) * 3 + seed) % 7 - 2
+    if dtype is np.complex128:
+        x = x + 1j * ((np.arange(n) + seed) % 3)
+    return np.array(list(x), dtype=dtype)
+
+
 class TestCorrelate:
     def _setup(self, dt):
         self.x = np.array([1, 2, 3, 4, 5], dtype=dt)
@@ -3649,6 +3669,31 @@ class TestCorrelate:
         self._setup(float)
         with pytest.raises(ValueError, match="non-negative"):
             np.correlate(self.x, self.y, lags=-1)
+
+    @pytest.mark.parametrize("dtype", _LAGS_DTYPES)
+    @pytest.mark.parametrize("n1", [1, 2, 5])
+    @pytest.mark.parametrize("n2", [1, 3, 6])
+    @pytest.mark.parametrize("lags", [0, 1, 2, 7])
+    def test_lags_matches_full(self, dtype, n1, n2, lags):
+        # lags=n must equal the [-n, n] window of 'full' (lag 0 is at index
+        # len(v) - 1), with zeros where the inputs do not overlap -- also
+        # for object arrays, which cannot be zero-filled with memset.
+        a = _lags_test_data(n1, dtype, 1)
+        v = _lags_test_data(n2, dtype, 2)
+        full = np.correlate(a, v, mode='full')
+        expected = _lags_window_from_full(full, n2 - 1, lags)
+        result = np.correlate(a, v, lags=lags)
+        assert result.dtype == expected.dtype
+        assert_array_equal(result, expected)
+
+    def test_lags_object_padding_is_zero(self):
+        # gh-31261: positions without overlap were left as None
+        res = np.correlate(np.array([2], dtype=object), [2], lags=1)
+        assert res.tolist() == [0, 4, 0]
+
+    def test_lags_too_large(self):
+        with pytest.raises(ValueError, match="too large"):
+            np.correlate([1, 2], [3], lags=np.iinfo(np.intp).max)
 
     def test_lags_non_int_rejected(self):
         self._setup(float)
@@ -3708,9 +3753,26 @@ class TestCorrelate:
         # integer mode
         with assert_raises(ValueError):
             np.correlate(d, k, mode=-1)
-        # assert_array_equal(np.correlate(d, k, mode=), default_mode)
         # None is equivalent to omitting mode (uses the default)
         assert_array_equal(np.correlate(d, k, mode=None), default_mode)
+
+    @pytest.mark.parametrize("mode", [np.int64(2), np.int32(2), np.array(2)])
+    def test_mode_numpy_integer(self, mode):
+        # NumPy integers and 0-d integer arrays are accepted as modes
+        d, k = np.arange(5.), np.ones(3)
+        assert_array_equal(np.correlate(d, k, mode=mode),
+                           np.correlate(d, k, mode='full'))
+        assert_array_equal(np.convolve(d, k, mode=mode),
+                           np.convolve(d, k, mode='full'))
+
+    def test_legacy_multiarray_correlate_not_reversed(self):
+        # The legacy (PyArray_Correlate) entry point swaps shorter-first
+        # inputs without reversing the result; keep that behavior.
+        from numpy._core import multiarray
+        assert_array_equal(multiarray.correlate([1, 2], [3, 4, 5], 2),
+                           [6, 11, 14, 5])
+        assert_array_equal(multiarray.correlate([3, 4, 5], [1, 2], 2),
+                           [6, 11, 14, 5])
 
 
 class TestConvolve:
@@ -3773,6 +3835,35 @@ class TestConvolve:
     def test_convolve_lags_with_explicit_mode_rejected(self):
         with pytest.raises(ValueError, match="cannot be used with an explicit mode"):
             np.convolve([1, 2, 3], [4, 5, 6], mode='full', lags=1)
+
+    @pytest.mark.parametrize("dtype", _LAGS_DTYPES)
+    @pytest.mark.parametrize("n1", [1, 2, 5])
+    @pytest.mark.parametrize("n2", [1, 3, 6])
+    @pytest.mark.parametrize("lags", [0, 1, 2, 7])
+    def test_convolve_lags_matches_full(self, dtype, n1, n2, lags):
+        # convolve swaps so the longer input comes first; lag 0 of its
+        # 'full' output is at index min(n1, n2) - 1.
+        a = _lags_test_data(n1, dtype, 1)
+        v = _lags_test_data(n2, dtype, 2)
+        full = np.convolve(a, v, mode='full')
+        expected = _lags_window_from_full(full, min(n1, n2) - 1, lags)
+        result = np.convolve(a, v, lags=lags)
+        assert result.dtype == expected.dtype
+        assert_array_equal(result, expected)
+
+    @pytest.mark.parametrize("n1, n2", [(2, 4), (4, 2), (3, 7), (5, 5)])
+    def test_documented_mode_lag_ranges(self, n1, n2):
+        # The convolve docstring states the lag range each mode covers,
+        # with L = max(n1, n2) and S = min(n1, n2).
+        a = np.arange(1., n1 + 1)
+        v = np.arange(2., n2 + 2)
+        L, S = max(n1, n2), min(n1, n2)
+        full = np.convolve(a, v, mode='full')
+        ranges = {'full': (-(S - 1), L), 'same': (-(S // 2), L - S // 2),
+                  'valid': (0, L - S + 1)}
+        for mode, (lo, hi) in ranges.items():
+            assert_array_equal(np.convolve(a, v, mode=mode),
+                               full[lo + S - 1:hi + S - 1])
 
     def test_convolve_lags_non_int_rejected(self):
         with pytest.raises(TypeError, match="lags must be an integer"):
