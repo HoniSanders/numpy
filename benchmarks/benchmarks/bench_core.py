@@ -176,7 +176,7 @@ class CorrConvLags(Benchmark):
         # The pre-existing way users had to do this: compute everything,
         # throw away most of it.
         full = np.correlate(self.x1, self.x2, mode='full')
-        center = len(full) // 2
+        center = len(self.x2) - 1  # index of lag 0 in 'full' output
         _ = full[center - self.lags_small:center + self.lags_small + 1]
 
     def time_convolve_lags_small(self, size1, size2):
